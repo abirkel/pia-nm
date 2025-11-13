@@ -35,35 +35,19 @@ sudo dnf install NetworkManager wireguard-tools systemd
 
 ## Installation
 
-### Option 1: Direct from GitHub (No Git Required)
-
-Install directly from the repository tarball without cloning:
+Install directly from GitHub:
 
 ```bash
-pip install --user https://github.com/abirkel/pia-nm/archive/refs/heads/main.tar.gz
+pip install git+https://github.com/abirkel/pia-nm.git
 ```
 
-Or using curl/wget:
+Or without git:
 
 ```bash
-# Using curl
-curl -L https://github.com/abirkel/pia-nm/archive/refs/heads/main.tar.gz | pip install --user -
-
-# Using wget
-wget -qO- https://github.com/abirkel/pia-nm/archive/refs/heads/main.tar.gz | pip install --user -
+pip install https://github.com/abirkel/pia-nm/archive/refs/heads/main.tar.gz
 ```
 
-### Option 2: Clone Repository
-
-If you prefer to clone the repository:
-
-```bash
-git clone https://github.com/abirkel/pia-nm.git
-cd pia-nm
-pip install --user .
-```
-
-### Verify Installation
+Verify installation:
 
 ```bash
 pia-nm --help
