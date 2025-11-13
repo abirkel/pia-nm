@@ -10,7 +10,7 @@ This module handles:
 
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -285,7 +285,7 @@ class ConfigManager:
             ConfigError: If save fails
         """
         config = self.load()
-        config["metadata"]["last_refresh"] = datetime.utcnow().isoformat() + "Z"
+        config["metadata"]["last_refresh"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         self.save(config)
         logger.info("Updated last_refresh timestamp")
 

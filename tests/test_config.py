@@ -413,12 +413,14 @@ class TestLastRefreshTimestamp:
 
     def test_update_last_refresh_sets_timestamp(self, tmp_path):
         """Test that update_last_refresh sets current timestamp."""
+        from datetime import timezone
+        
         config_path = tmp_path / "config.yaml"
         manager = ConfigManager(config_path=config_path)
 
-        before = datetime.utcnow().isoformat()
+        before = datetime.now(timezone.utc).isoformat()
         manager.update_last_refresh()
-        after = datetime.utcnow().isoformat()
+        after = datetime.now(timezone.utc).isoformat()
 
         config = manager.load()
         timestamp = config["metadata"]["last_refresh"]
