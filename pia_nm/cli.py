@@ -4,7 +4,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 
 class CompactHelpFormatter(argparse.RawDescriptionHelpFormatter):
@@ -14,10 +14,10 @@ class CompactHelpFormatter(argparse.RawDescriptionHelpFormatter):
         """Override to show {command} instead of listing all commands."""
         if prefix is None:
             prefix = "usage: "
-        
+
         # Get the program name
         prog = self._prog
-        
+
         # Build a compact usage string
         usage_str = f"{prefix}{prog} [-h] [-v] {{command}} [options]"
         return usage_str + "\n"
@@ -25,7 +25,6 @@ class CompactHelpFormatter(argparse.RawDescriptionHelpFormatter):
 
 from pia_nm.logging_config import setup_logging
 from pia_nm.error_handling import (
-    handle_error,
     log_operation_start,
     log_operation_success,
     log_operation_failure,
@@ -48,7 +47,6 @@ from pia_nm.network_manager import (
     update_profile,
     delete_profile,
     is_active,
-    list_profiles,
     profile_exists,
 )
 from pia_nm.systemd_manager import (
@@ -199,14 +197,14 @@ def cmd_setup() -> None:
 
     if invalid_ids:
         print(f"✗ Invalid region IDs: {', '.join(invalid_ids)}")
-        logger.error(f"Invalid region IDs: {invalid_ids}")
+        logger.error("Invalid region IDs: %s", invalid_ids)
         return
 
-    logger.info(f"Selected regions for setup: {selected_ids}")
+    logger.info("Selected regions for setup: %s", selected_ids)
 
     # 6. Create profiles for each region
     print("\nCreating profiles...")
-    successful_regions = []
+    successful_regions: List[str] = []
 
     for region_id in selected_ids:
         try:
@@ -216,7 +214,7 @@ def cmd_setup() -> None:
             # Load or generate keypair
             try:
                 private_key, public_key = load_keypair(region_id)
-                logger.debug(f"Loaded existing keypair for region: {region_id}")
+                logger.debug("Loaded existing keypair for region: %s", region_id)
             except FileNotFoundError:
                 log_operation_start(f"generate keypair for {region_id}")
                 private_key, public_key = generate_keypair()
@@ -247,7 +245,9 @@ def cmd_setup() -> None:
                 log_operation_success(f"setup region {region_id}")
             else:
                 print("✗")
-                log_operation_failure(f"setup region {region_id}", Exception("profile creation failed"))
+                log_operation_failure(
+                    f"setup region {region_id}", Exception("profile creation failed")
+                )
 
         except Exception as e:
             print(f"✗ ({e})")
@@ -298,8 +298,8 @@ def cmd_setup() -> None:
     print("✓ Setup Complete!")
     print("=" * 50)
     print(f"\nConfigured regions ({len(successful_regions)}):")
-    for region in successful_regions:
-        print(f"  • {region}")
+    for region_name in successful_regions:
+        print(f"  • {region_name}")
     print("\nYou can now:")
     print("  • View status: pia-nm status")
     print("  • Connect via NetworkManager GUI")
@@ -310,7 +310,6 @@ def cmd_setup() -> None:
 
 def cmd_list_regions(port_forwarding: bool = False) -> None:
     """List available PIA regions."""
-    logger = logging.getLogger(__name__)
     log_operation_start("list-regions command", f"port_forwarding={port_forwarding}")
 
     try:
@@ -330,9 +329,7 @@ def cmd_list_regions(port_forwarding: bool = False) -> None:
 
         for region in regions:
             pf = "Yes" if region.get("port_forward") else "No"
-            print(
-                f"{region['id']:<20} {region['name']:<30} {region['country']:<10} {pf:<12}"
-            )
+            print(f"{region['id']:<20} {region['name']:<30} {region['country']:<10} {pf:<12}")
 
         log_operation_success("list-regions command")
 
@@ -379,7 +376,7 @@ def cmd_refresh(region: Optional[str] = None) -> None:
         logger.warning("No regions configured for refresh")
         return
 
-    logger.info(f"Refreshing {len(regions_to_refresh)} region(s)")
+    logger.info("Refreshing %d region(s)", len(regions_to_refresh))
 
     # Get credentials
     try:
@@ -430,7 +427,7 @@ def cmd_refresh(region: Optional[str] = None) -> None:
             # Load keypair
             try:
                 private_key, public_key = load_keypair(region_id)
-                logger.debug(f"Loaded keypair for region: {region_id}")
+                logger.debug("Loaded keypair for region: %s", region_id)
             except FileNotFoundError:
                 print("✗ (keypair not found)")
                 log_operation_failure(f"refresh region {region_id}", Exception("keypair not found"))
@@ -473,7 +470,9 @@ def cmd_refresh(region: Optional[str] = None) -> None:
                 successful += 1
             else:
                 print("✗")
-                log_operation_failure(f"refresh region {region_id}", Exception("profile update failed"))
+                log_operation_failure(
+                    f"refresh region {region_id}", Exception("profile update failed")
+                )
                 failed += 1
 
         except Exception as e:
@@ -487,7 +486,7 @@ def cmd_refresh(region: Optional[str] = None) -> None:
         config_mgr.update_last_refresh()
         log_operation_success("update last_refresh timestamp")
     except Exception as e:
-        logger.warning(f"Failed to update last_refresh timestamp: {e}")
+        logger.warning("Failed to update last_refresh timestamp: %s", e)
 
     # Summary
     print(f"\n✓ Refresh complete: {successful} successful, {failed} failed")
@@ -510,10 +509,10 @@ def cmd_add_region(region_id: str) -> None:
 
         if region_id not in region_ids:
             print(f"✗ Region '{region_id}' not found")
-            logger.error(f"Region not found: {region_id}")
+            logger.error("Region not found: %s", region_id)
             sys.exit(1)
 
-        logger.info(f"Verified region exists: {region_id}")
+        logger.info("Verified region exists: %s", region_id)
     except Exception as e:
         print(f"✗ Failed to verify region: {e}")
         log_operation_failure("verify region", e)
@@ -551,7 +550,7 @@ def cmd_add_region(region_id: str) -> None:
         log_operation_success(f"generate keypair for {region_id}")
     except Exception as e:
         print(f"✗ ({e})")
-        log_operation_failure(f"generate keypair", e)
+        log_operation_failure("generate keypair", e)
         sys.exit(1)
 
     # Register key
@@ -582,7 +581,7 @@ def cmd_add_region(region_id: str) -> None:
 
         if not success:
             print("✗")
-            log_operation_failure(f"create profile", Exception("profile creation failed"))
+            log_operation_failure("create profile", Exception("profile creation failed"))
             print_error("nm_operation_failed")
             sys.exit(1)
 
@@ -630,7 +629,7 @@ def cmd_remove_region(region_id: str) -> None:
 
     if region_id not in config.get("regions", []):
         print(f"✗ Region '{region_id}' not configured")
-        logger.warning(f"Region not configured: {region_id}")
+        logger.warning("Region not configured: %s", region_id)
         return
 
     # Delete profile
@@ -664,7 +663,7 @@ def cmd_remove_region(region_id: str) -> None:
         delete_keypair(region_id)
         log_operation_success(f"delete keypair for {region_id}")
     except Exception as e:
-        logger.warning(f"Failed to delete keypair: {e}")
+        logger.warning("Failed to delete keypair: %s", e)
 
     print(f"✓ Region '{region_id}' removed successfully")
     log_operation_success("remove-region command")
@@ -702,7 +701,7 @@ def cmd_status() -> None:
 
             status = "✓ Active" if active else ("✓ Exists" if exists else "✗ Missing")
             print(f"  • {region_id:<20} {status}")
-            logger.debug(f"Region {region_id}: exists={exists}, active={active}")
+            logger.debug("Region %s: exists=%s, active=%s", region_id, exists, active)
     else:
         print("  (none configured)")
 
@@ -718,7 +717,7 @@ def cmd_status() -> None:
         log_operation_success("check systemd timer status")
     except Exception as e:
         print(f"\nSystemd timer: Error ({e})")
-        logger.warning(f"Failed to check timer status: {e}")
+        logger.warning("Failed to check timer status: %s", e)
 
     print()
     log_operation_success("status command")
@@ -726,7 +725,6 @@ def cmd_status() -> None:
 
 def cmd_install() -> None:
     """Install systemd units."""
-    logger = logging.getLogger(__name__)
     log_operation_start("install command")
 
     try:
@@ -743,7 +741,6 @@ def cmd_install() -> None:
 
 def cmd_uninstall() -> None:
     """Uninstall and remove all components."""
-    logger = logging.getLogger(__name__)
     log_operation_start("uninstall command")
 
     # Confirm with user
@@ -759,7 +756,7 @@ def cmd_uninstall() -> None:
     confirm = input("\nContinue? (yes/no): ").strip().lower()
     if confirm != "yes":
         print("Uninstall cancelled")
-        logger.info("Uninstall cancelled by user")
+        logging.getLogger(__name__).info("Uninstall cancelled by user")
         return
 
     # Remove profiles
@@ -807,7 +804,7 @@ def cmd_uninstall() -> None:
             log_file_operation("delete", str(config_dir))
             shutil.rmtree(config_dir)
             print(f"  ✓ Removed {config_dir}")
-            log_operation_success(f"delete configuration directory")
+            log_operation_success("delete configuration directory")
     except Exception as e:
         print(f"  ✗ Failed to remove configuration: {e}")
         log_operation_failure("delete configuration directory", e)
@@ -824,7 +821,7 @@ def cmd_uninstall() -> None:
         log_operation_success("remove credentials from keyring")
     except Exception as e:
         print(f"  ✗ Failed to remove credentials: {e}")
-        logger.warning(f"Failed to remove credentials: {e}")
+        logging.getLogger(__name__).warning("Failed to remove credentials: %s", e)
 
     print("\n" + "=" * 50)
     print("✓ Uninstall Complete")
@@ -834,7 +831,6 @@ def cmd_uninstall() -> None:
 
 def cmd_enable() -> None:
     """Enable the systemd timer."""
-    logger = logging.getLogger(__name__)
     log_operation_start("enable command")
 
     try:
@@ -851,7 +847,6 @@ def cmd_enable() -> None:
 
 def cmd_disable() -> None:
     """Disable the systemd timer."""
-    logger = logging.getLogger(__name__)
     log_operation_start("disable command")
 
     try:
@@ -940,7 +935,7 @@ def main() -> None:
     # Setup logging
     setup_logging(args.verbose)
     logger = logging.getLogger(__name__)
-    logger.info(f"pia-nm started (verbose={args.verbose})")
+    logger.info("pia-nm started (verbose=%s)", args.verbose)
 
     # Check system dependencies
     if not check_system_dependencies():
@@ -981,7 +976,7 @@ def main() -> None:
         logger.info("Interrupted by user")
         sys.exit(130)
     except Exception as e:
-        logger.error(f"Unexpected error: {e}", exc_info=True)
+        logger.error("Unexpected error: %s", e, exc_info=True)
         print(f"\n✗ Unexpected error: {e}")
         sys.exit(1)
 

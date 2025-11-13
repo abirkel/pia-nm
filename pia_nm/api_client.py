@@ -11,7 +11,11 @@ import logging
 from typing import Any, Dict, List, Optional
 
 import requests
-from requests.exceptions import RequestException, Timeout, ConnectionError
+from requests.exceptions import (
+    RequestException,
+    Timeout,
+    ConnectionError as RequestsConnectionError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,25 +28,17 @@ MAX_RETRIES = 1  # Single immediate retry on network failures
 class PIAAPIError(Exception):
     """Base exception for PIA API errors."""
 
-    pass
-
 
 class AuthenticationError(PIAAPIError):
     """Authentication with PIA failed."""
-
-    pass
 
 
 class NetworkError(PIAAPIError):
     """Network communication with PIA failed."""
 
-    pass
-
 
 class APIError(PIAAPIError):
     """PIA API returned an error response."""
-
-    pass
 
 
 class PIAClient:
@@ -56,11 +52,9 @@ class PIAClient:
         """
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
-        logger.debug(f"Initialized PIAClient with base_url: {self.base_url}")
+        logger.debug("Initialized PIAClient with base_url: %s", self.base_url)
 
-    def _validate_response_structure(
-        self, response_data: Any, required_keys: List[str]
-    ) -> None:
+    def _validate_response_structure(self, response_data: Any, required_keys: List[str]) -> None:
         """Validate that response contains required keys.
 
         Args:
@@ -105,9 +99,7 @@ class PIAClient:
 
         try:
             if method.upper() == "GET":
-                response = self.session.get(
-                    url, headers=headers, timeout=REQUEST_TIMEOUT
-                )
+                response = self.session.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
             elif method.upper() == "POST":
                 response = self.session.post(
                     url, headers=headers, json=json_data, timeout=REQUEST_TIMEOUT
@@ -118,35 +110,40 @@ class PIAClient:
             response.raise_for_status()
 
             try:
-                return response.json()
+                data = response.json()
+                if not isinstance(data, dict):
+                    raise APIError("Response is not a JSON object")
+                return data
             except ValueError as e:
-                raise APIError(f"Invalid JSON in response: {e}")
+                raise APIError(f"Invalid JSON in response: {e}") from e
 
-        except (Timeout, ConnectionError) as e:
+        except (Timeout, RequestsConnectionError) as e:
             # Retry once on network failures
             if retry_count < MAX_RETRIES:
                 logger.warning(
-                    f"Network error on {method} {endpoint}, retrying... ({retry_count + 1}/{MAX_RETRIES})"
+                    "Network error on %s %s, retrying... (%d/%d)",
+                    method,
+                    endpoint,
+                    retry_count + 1,
+                    MAX_RETRIES,
                 )
-                return self._make_request(
-                    method, endpoint, headers, json_data, retry_count + 1
-                )
+                return self._make_request(method, endpoint, headers, json_data, retry_count + 1)
             else:
-                logger.error(f"Network error after retries: {e}")
-                raise NetworkError(f"Failed to reach PIA API: {e}")
+                logger.error("Network error after retries: %s", e)
+                raise NetworkError(f"Failed to reach PIA API: {e}") from e
 
         except requests.exceptions.HTTPError as e:
             status_code = e.response.status_code
-            logger.error(f"HTTP {status_code} error from PIA API: {e}")
+            logger.error("HTTP %d error from PIA API: %s", status_code, e)
 
             if status_code == 401:
-                raise AuthenticationError("Invalid credentials or expired token")
+                raise AuthenticationError("Invalid credentials or expired token") from e
             else:
-                raise APIError(f"PIA API error ({status_code}): {e}")
+                raise APIError(f"PIA API error ({status_code}): {e}") from e
 
         except RequestException as e:
-            logger.error(f"Request error: {e}")
-            raise NetworkError(f"Request failed: {e}")
+            logger.error("Request error: %s", e)
+            raise NetworkError(f"Request failed: {e}") from e
 
     def authenticate(self, username: str, password: str) -> str:
         """Authenticate with PIA and return auth token.
@@ -171,14 +168,12 @@ class PIAClient:
         headers = {"Authorization": f"Basic {encoded}"}
 
         try:
-            response = self._make_request(
-                "GET", "/api/client/v2/token", headers=headers
-            )
+            response = self._make_request("GET", "/api/client/v2/token", headers=headers)
 
             self._validate_response_structure(response, ["token"])
 
             token = response.get("token")
-            if not token:
+            if not isinstance(token, str) or not token:
                 raise AuthenticationError("No token in response")
 
             logger.info("Authentication successful")
@@ -187,8 +182,8 @@ class PIAClient:
         except (AuthenticationError, NetworkError):
             raise
         except Exception as e:
-            logger.error(f"Unexpected error during authentication: {e}")
-            raise AuthenticationError(f"Authentication failed: {e}")
+            logger.error("Unexpected error during authentication: %s", e)
+            raise AuthenticationError(f"Authentication failed: {e}") from e
 
     def get_regions(self) -> List[Dict[str, Any]]:
         """Query PIA API for available regions and servers.
@@ -212,18 +207,16 @@ class PIAClient:
             if not isinstance(regions, list):
                 raise APIError("'regions' field is not a list")
 
-            logger.info(f"Retrieved {len(regions)} regions from PIA API")
+            logger.info("Retrieved %d regions from PIA API", len(regions))
             return regions
 
         except (NetworkError, APIError):
             raise
         except Exception as e:
-            logger.error(f"Unexpected error querying regions: {e}")
-            raise APIError(f"Failed to query regions: {e}")
+            logger.error("Unexpected error querying regions: %s", e)
+            raise APIError(f"Failed to query regions: {e}") from e
 
-    def register_key(
-        self, token: str, pubkey: str, region_id: str
-    ) -> Dict[str, Any]:
+    def register_key(self, token: str, pubkey: str, region_id: str) -> Dict[str, Any]:
         """Register WireGuard public key with PIA servers.
 
         Args:
@@ -244,7 +237,7 @@ class PIAClient:
             NetworkError: If network communication fails
             APIError: If API returns error response
         """
-        logger.info(f"Registering WireGuard key for region: {region_id}")
+        logger.info("Registering WireGuard key for region: %s", region_id)
 
         headers = {
             "Authorization": f"Token {token}",
@@ -270,7 +263,7 @@ class PIAClient:
             if status != "OK":
                 raise APIError(f"Key registration failed with status: {status}")
 
-            logger.info(f"Successfully registered key for region: {region_id}")
+            logger.info("Successfully registered key for region: %s", region_id)
             return response
 
         except AuthenticationError:
@@ -278,5 +271,5 @@ class PIAClient:
         except (NetworkError, APIError):
             raise
         except Exception as e:
-            logger.error(f"Unexpected error registering key: {e}")
-            raise APIError(f"Failed to register key: {e}")
+            logger.error("Unexpected error registering key: %s", e)
+            raise APIError(f"Failed to register key: {e}") from e

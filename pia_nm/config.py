@@ -9,7 +9,6 @@ This module handles:
 """
 
 import logging
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -28,8 +27,6 @@ KEYRING_PASSWORD_KEY = "password"
 
 class ConfigError(Exception):
     """Configuration-related error."""
-
-    pass
 
 
 class ConfigManager:
@@ -150,7 +147,7 @@ class ConfigManager:
             return config
 
         try:
-            with open(self.config_path, "r") as f:
+            with open(self.config_path, "r", encoding="utf-8") as f:
                 config = yaml.safe_load(f)
 
             if config is None:
@@ -161,9 +158,9 @@ class ConfigManager:
             return config
 
         except yaml.YAMLError as e:
-            raise ConfigError(f"Invalid YAML in config file: {e}")
+            raise ConfigError(f"Invalid YAML in config file: {e}") from e
         except OSError as e:
-            raise ConfigError(f"Failed to read config file: {e}")
+            raise ConfigError(f"Failed to read config file: {e}") from e
 
     def save(self, config: Dict[str, Any]) -> None:
         """Save configuration to YAML file with proper permissions.
@@ -181,7 +178,7 @@ class ConfigManager:
             self.config_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Write config
-            with open(self.config_path, "w") as f:
+            with open(self.config_path, "w", encoding="utf-8") as f:
                 yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
             # Set restrictive permissions
@@ -189,9 +186,9 @@ class ConfigManager:
             logger.debug("Configuration saved")
 
         except OSError as e:
-            raise ConfigError(f"Failed to save config file: {e}")
+            raise ConfigError(f"Failed to save config file: {e}") from e
         except yaml.YAMLError as e:
-            raise ConfigError(f"Failed to serialize config to YAML: {e}")
+            raise ConfigError(f"Failed to serialize config to YAML: {e}") from e
 
     def get_credentials(self) -> Tuple[str, str]:
         """Retrieve username and password from system keyring.
@@ -213,7 +210,7 @@ class ConfigManager:
             return username, password
 
         except KeyringError as e:
-            raise ConfigError(f"Keyring error: {e}")
+            raise ConfigError(f"Keyring error: {e}") from e
 
     def set_credentials(self, username: str, password: str) -> None:
         """Store username and password in system keyring.
@@ -231,7 +228,7 @@ class ConfigManager:
             logger.info("Credentials stored in system keyring")
 
         except KeyringError as e:
-            raise ConfigError(f"Failed to store credentials in keyring: {e}")
+            raise ConfigError(f"Failed to store credentials in keyring: {e}") from e
 
     def add_region(self, region_id: str) -> None:
         """Add region to configuration.
@@ -249,7 +246,7 @@ class ConfigManager:
 
         config["regions"].append(region_id)
         self.save(config)
-        logger.info(f"Added region: {region_id}")
+        logger.info("Added region: %s", region_id)
 
     def remove_region(self, region_id: str) -> None:
         """Remove region from configuration.
@@ -267,7 +264,7 @@ class ConfigManager:
 
         config["regions"].remove(region_id)
         self.save(config)
-        logger.info(f"Removed region: {region_id}")
+        logger.info("Removed region: %s", region_id)
 
     def get_regions(self) -> List[str]:
         """Get list of configured regions.
@@ -276,7 +273,10 @@ class ConfigManager:
             List of region identifiers
         """
         config = self.load()
-        return config["regions"]
+        regions = config["regions"]
+        if not isinstance(regions, list):
+            return []
+        return regions
 
     def update_last_refresh(self) -> None:
         """Update last_refresh timestamp to current time.
@@ -285,7 +285,9 @@ class ConfigManager:
             ConfigError: If save fails
         """
         config = self.load()
-        config["metadata"]["last_refresh"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        config["metadata"]["last_refresh"] = (
+            datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        )
         self.save(config)
         logger.info("Updated last_refresh timestamp")
 
@@ -296,4 +298,7 @@ class ConfigManager:
             ISO 8601 formatted timestamp or None if never refreshed
         """
         config = self.load()
-        return config["metadata"]["last_refresh"]
+        last_refresh = config["metadata"]["last_refresh"]
+        if isinstance(last_refresh, str):
+            return last_refresh
+        return None

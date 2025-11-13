@@ -18,49 +18,33 @@ logger = logging.getLogger(__name__)
 class PIANMError(Exception):
     """Base exception for pia-nm."""
 
-    pass
-
 
 class AuthenticationError(PIANMError):
     """Authentication with PIA failed."""
-
-    pass
 
 
 class NetworkError(PIANMError):
     """Network communication failed."""
 
-    pass
-
 
 class APIError(PIANMError):
     """PIA API returned an error."""
-
-    pass
 
 
 class ConfigError(PIANMError):
     """Configuration file error."""
 
-    pass
-
 
 class NetworkManagerError(PIANMError):
     """NetworkManager operation failed."""
-
-    pass
 
 
 class SystemDependencyError(PIANMError):
     """Required system command not found."""
 
-    pass
-
 
 class WireGuardError(PIANMError):
     """WireGuard operation failed."""
-
-    pass
 
 
 # Error message templates
@@ -283,9 +267,9 @@ def log_operation_start(operation: str, details: Optional[str] = None) -> None:
         details: Optional details about the operation
     """
     if details:
-        logger.info(f"Starting: {operation} ({details})")
+        logger.info("Starting: %s (%s)", operation, details)
     else:
-        logger.info(f"Starting: {operation}")
+        logger.info("Starting: %s", operation)
 
 
 def log_operation_success(operation: str, details: Optional[str] = None) -> None:
@@ -296,9 +280,9 @@ def log_operation_success(operation: str, details: Optional[str] = None) -> None
         details: Optional details about the result
     """
     if details:
-        logger.info(f"Success: {operation} ({details})")
+        logger.info("Success: %s (%s)", operation, details)
     else:
-        logger.info(f"Success: {operation}")
+        logger.info("Success: %s", operation)
 
 
 def log_operation_failure(operation: str, error: Exception, details: Optional[str] = None) -> None:
@@ -310,9 +294,9 @@ def log_operation_failure(operation: str, error: Exception, details: Optional[st
         details: Optional additional details
     """
     if details:
-        logger.error(f"Failed: {operation} ({details}): {error}")
+        logger.error("Failed: %s (%s): %s", operation, details, error)
     else:
-        logger.error(f"Failed: {operation}: {error}")
+        logger.error("Failed: %s: %s", operation, error)
 
 
 def log_api_operation(operation: str, region: Optional[str] = None) -> None:
@@ -323,9 +307,9 @@ def log_api_operation(operation: str, region: Optional[str] = None) -> None:
         region: Optional region being operated on
     """
     if region:
-        logger.info(f"API operation: {operation} (region={region})")
+        logger.info("API operation: %s (region=%s)", operation, region)
     else:
-        logger.info(f"API operation: {operation}")
+        logger.info("API operation: %s", operation)
 
 
 def log_nm_operation(operation: str, profile: Optional[str] = None) -> None:
@@ -336,9 +320,9 @@ def log_nm_operation(operation: str, profile: Optional[str] = None) -> None:
         profile: Optional profile name
     """
     if profile:
-        logger.info(f"NetworkManager: {operation} (profile={profile})")
+        logger.info("NetworkManager: %s (profile=%s)", operation, profile)
     else:
-        logger.info(f"NetworkManager: {operation}")
+        logger.info("NetworkManager: %s", operation)
 
 
 def log_file_operation(operation: str, file_path: str, success: bool = True) -> None:
@@ -350,4 +334,4 @@ def log_file_operation(operation: str, file_path: str, success: bool = True) -> 
         success: Whether the operation succeeded
     """
     status = "success" if success else "failed"
-    logger.info(f"File operation: {operation} {file_path} ({status})")
+    logger.info("File operation: %s %s (%s)", operation, file_path, status)

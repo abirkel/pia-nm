@@ -47,14 +47,14 @@ def profile_exists(profile_name: str) -> bool:
         exists = profile_name in profiles
 
         if exists:
-            logger.debug(f"Profile exists: {profile_name}")
+            logger.debug("Profile exists: %s", profile_name)
         else:
-            logger.debug(f"Profile does not exist: {profile_name}")
+            logger.debug("Profile does not exist: %s", profile_name)
 
         return exists
 
     except subprocess.CalledProcessError as e:
-        logger.error(f"nmcli failed to list profiles: {e.stderr}")
+        logger.error("nmcli failed to list profiles: %s", e.stderr)
         raise NetworkManagerError(f"Failed to check if profile exists: {e.stderr}") from e
     except subprocess.TimeoutExpired as e:
         logger.error("nmcli command timed out")
@@ -88,7 +88,7 @@ def is_active(profile_name: str) -> bool:
         )
 
         if result.returncode != 0:
-            logger.debug(f"Failed to get active connections: {result.stderr}")
+            logger.debug("Failed to get active connections: %s", result.stderr)
             return False
 
         # Parse output: each line is "name:device"
@@ -102,9 +102,9 @@ def is_active(profile_name: str) -> bool:
         is_active_result = profile_name in active_profiles
 
         if is_active_result:
-            logger.debug(f"Profile is active: {profile_name}")
+            logger.debug("Profile is active: %s", profile_name)
         else:
-            logger.debug(f"Profile is not active: {profile_name}")
+            logger.debug("Profile is not active: %s", profile_name)
 
         return is_active_result
 
@@ -139,11 +139,11 @@ def list_profiles() -> List[str]:
         all_profiles = result.stdout.strip().split("\n")
         pia_profiles = [p for p in all_profiles if p.startswith("PIA-")]
 
-        logger.info(f"Found {len(pia_profiles)} PIA-managed profiles")
+        logger.info("Found %d PIA-managed profiles", len(pia_profiles))
         return pia_profiles
 
     except subprocess.CalledProcessError as e:
-        logger.error(f"nmcli failed to list profiles: {e.stderr}")
+        logger.error("nmcli failed to list profiles: %s", e.stderr)
         raise NetworkManagerError(f"Failed to list profiles: {e.stderr}") from e
     except subprocess.TimeoutExpired as e:
         logger.error("nmcli command timed out")
@@ -157,11 +157,7 @@ def list_profiles() -> List[str]:
 
 def create_profile(
     profile_name: str,
-    private_key: str,
-    server_pubkey: str,
-    endpoint: str,
-    peer_ip: str,
-    dns_servers: List[str],
+    config: Dict[str, Any],
     listen_port: int = 0,
     keepalive: int = 25,
 ) -> bool:
@@ -173,11 +169,12 @@ def create_profile(
 
     Args:
         profile_name: Name for the connection profile (e.g., "PIA-US-East")
-        private_key: WireGuard private key (base64-encoded)
-        server_pubkey: WireGuard server public key (base64-encoded)
-        endpoint: VPN server endpoint in format "IP:PORT"
-        peer_ip: Assigned client IP address
-        dns_servers: List of DNS server IP addresses
+        config: Configuration dictionary with keys:
+            - private_key: WireGuard private key (base64-encoded)
+            - server_pubkey: WireGuard server public key (base64-encoded)
+            - endpoint: VPN server endpoint in format "IP:PORT"
+            - peer_ip: Assigned client IP address
+            - dns_servers: List of DNS server IP addresses
         listen_port: WireGuard listen port (0 for automatic)
         keepalive: Persistent keepalive interval in seconds
 
@@ -188,13 +185,20 @@ def create_profile(
         NetworkManagerError: If nmcli commands fail
     """
     try:
+        # Extract config values
+        private_key = config["private_key"]
+        server_pubkey = config["server_pubkey"]
+        endpoint = config["endpoint"]
+        peer_ip = config["peer_ip"]
+        dns_servers = config["dns_servers"]
+
         # Generate interface name from profile name
         ifname = f"wg-{profile_name.lower().replace(' ', '-')}"
 
-        logger.info(f"Creating WireGuard profile: {profile_name}")
+        logger.info("Creating WireGuard profile: %s", profile_name)
 
         # Step 1: Create base WireGuard connection
-        logger.debug(f"Creating base connection: {profile_name}")
+        logger.debug("Creating base connection: %s", profile_name)
         result = subprocess.run(
             [
                 "nmcli",
@@ -215,10 +219,10 @@ def create_profile(
             timeout=10,
         )
 
-        logger.debug(f"Base connection created: {result.stdout.strip()}")
+        logger.debug("Base connection created: %s", result.stdout.strip())
 
         # Step 2: Configure WireGuard peer and network settings
-        logger.debug(f"Configuring peer and network settings for: {profile_name}")
+        logger.debug("Configuring peer and network settings for: %s", profile_name)
 
         # Build DNS string
         dns_string = " ".join(dns_servers)
@@ -262,16 +266,14 @@ def create_profile(
             timeout=10,
         )
 
-        logger.info(f"Successfully created profile: {profile_name}")
+        logger.info("Successfully created profile: %s", profile_name)
         return True
 
     except subprocess.CalledProcessError as e:
-        logger.error(f"nmcli failed to create profile {profile_name}: {e.stderr}")
-        raise NetworkManagerError(
-            f"Failed to create profile {profile_name}: {e.stderr}"
-        ) from e
+        logger.error("nmcli failed to create profile %s: %s", profile_name, e.stderr)
+        raise NetworkManagerError(f"Failed to create profile {profile_name}: {e.stderr}") from e
     except subprocess.TimeoutExpired as e:
-        logger.error(f"nmcli command timed out creating {profile_name}")
+        logger.error("nmcli command timed out creating %s", profile_name)
         raise NetworkManagerError(f"Profile creation timed out: {profile_name}") from e
     except FileNotFoundError as e:
         logger.error("nmcli command not found")
@@ -282,11 +284,7 @@ def create_profile(
 
 def update_profile(
     profile_name: str,
-    private_key: str,
-    server_pubkey: str,
-    endpoint: str,
-    peer_ip: str,
-    dns_servers: List[str],
+    config: Dict[str, Any],
     listen_port: int = 0,
     keepalive: int = 25,
 ) -> bool:
@@ -298,11 +296,12 @@ def update_profile(
 
     Args:
         profile_name: Name of the connection profile to update
-        private_key: WireGuard private key (base64-encoded)
-        server_pubkey: WireGuard server public key (base64-encoded)
-        endpoint: VPN server endpoint in format "IP:PORT"
-        peer_ip: Assigned client IP address
-        dns_servers: List of DNS server IP addresses
+        config: Configuration dictionary with keys:
+            - private_key: WireGuard private key (base64-encoded)
+            - server_pubkey: WireGuard server public key (base64-encoded)
+            - endpoint: VPN server endpoint in format "IP:PORT"
+            - peer_ip: Assigned client IP address
+            - dns_servers: List of DNS server IP addresses
         listen_port: WireGuard listen port (0 for automatic)
         keepalive: Persistent keepalive interval in seconds
 
@@ -313,15 +312,20 @@ def update_profile(
         NetworkManagerError: If nmcli commands fail
     """
     try:
+        # Extract config values
+        private_key = config["private_key"]
+        server_pubkey = config["server_pubkey"]
+        endpoint = config["endpoint"]
+        peer_ip = config["peer_ip"]
+        dns_servers = config["dns_servers"]
+
         # Check if connection is active (for logging only)
         was_active = is_active(profile_name)
 
         if was_active:
-            logger.info(
-                f"Profile {profile_name} is active, updating without disconnecting"
-            )
+            logger.info("Profile %s is active, updating without disconnecting", profile_name)
         else:
-            logger.info(f"Updating profile: {profile_name}")
+            logger.info("Updating profile: %s", profile_name)
 
         # Build DNS string
         dns_string = " ".join(dns_servers)
@@ -370,20 +374,18 @@ def update_profile(
 
         if was_active:
             logger.info(
-                f"Profile {profile_name} updated. New config will be used on next connection."
+                "Profile %s updated. New config will be used on next connection.", profile_name
             )
         else:
-            logger.info(f"Successfully updated profile: {profile_name}")
+            logger.info("Successfully updated profile: %s", profile_name)
 
         return True
 
     except subprocess.CalledProcessError as e:
-        logger.error(f"nmcli failed to update profile {profile_name}: {e.stderr}")
-        raise NetworkManagerError(
-            f"Failed to update profile {profile_name}: {e.stderr}"
-        ) from e
+        logger.error("nmcli failed to update profile %s: %s", profile_name, e.stderr)
+        raise NetworkManagerError(f"Failed to update profile {profile_name}: {e.stderr}") from e
     except subprocess.TimeoutExpired as e:
-        logger.error(f"nmcli command timed out updating {profile_name}")
+        logger.error("nmcli command timed out updating %s", profile_name)
         raise NetworkManagerError(f"Profile update timed out: {profile_name}") from e
     except FileNotFoundError as e:
         logger.error("nmcli command not found")
@@ -405,7 +407,7 @@ def delete_profile(profile_name: str) -> bool:
         NetworkManagerError: If nmcli command fails for reasons other than profile not found
     """
     try:
-        logger.info(f"Deleting profile: {profile_name}")
+        logger.info("Deleting profile: %s", profile_name)
 
         result = subprocess.run(
             ["nmcli", "connection", "delete", profile_name],
@@ -416,21 +418,21 @@ def delete_profile(profile_name: str) -> bool:
         )
 
         if result.returncode == 0:
-            logger.info(f"Successfully deleted profile: {profile_name}")
+            logger.info("Successfully deleted profile: %s", profile_name)
             return True
         else:
             # Check if error is "profile not found"
             if "not found" in result.stderr.lower() or "unknown" in result.stderr.lower():
-                logger.debug(f"Profile not found (already deleted): {profile_name}")
+                logger.debug("Profile not found (already deleted): %s", profile_name)
                 return False
             else:
-                logger.error(f"nmcli failed to delete profile {profile_name}: {result.stderr}")
+                logger.error("nmcli failed to delete profile %s: %s", profile_name, result.stderr)
                 raise NetworkManagerError(
                     f"Failed to delete profile {profile_name}: {result.stderr}"
                 )
 
     except subprocess.TimeoutExpired as e:
-        logger.error(f"nmcli command timed out deleting {profile_name}")
+        logger.error("nmcli command timed out deleting %s", profile_name)
         raise NetworkManagerError(f"Profile deletion timed out: {profile_name}") from e
     except FileNotFoundError as e:
         logger.error("nmcli command not found")
