@@ -349,13 +349,55 @@ pylint pia_nm/
 
 ## Contributing
 
-Contributions are welcome! Please:
+Contributions are welcome! Please follow these guidelines:
+
+### Code Quality Standards
+
+**Style:**
+- Follow PEP 8 style guide
+- Use type hints (Python 3.9+ typing)
+- Docstrings for all public functions
+- Black formatter for consistency
+
+**Before Submitting:**
 
 1. Fork the repository
 2. Create a feature branch
-3. Write tests for new functionality
-4. Ensure code passes linting and type checking
-5. Submit a pull request
+3. Write code with type hints and docstrings
+4. Write tests for new functionality
+5. Format code with Black:
+   ```bash
+   black pia_nm/
+   ```
+6. Run type checking:
+   ```bash
+   mypy pia_nm/
+   ```
+7. Run linting:
+   ```bash
+   pylint pia_nm/
+   ```
+8. Ensure all tests pass:
+   ```bash
+   pytest
+   ```
+9. Submit a pull request
+
+### Code Review Checklist
+
+- [ ] Type hints on all functions
+- [ ] Docstrings with clear descriptions
+- [ ] Error handling with specific exceptions
+- [ ] Logging at appropriate levels
+- [ ] No hardcoded paths or credentials
+- [ ] File permissions set correctly
+- [ ] Subprocess calls use `check=True`
+- [ ] Input validation for user data
+- [ ] Tests written and passing
+- [ ] No sensitive data in logs
+- [ ] Code formatted with Black
+- [ ] Passes mypy type checking
+- [ ] Passes pylint linting
 
 ## License
 
