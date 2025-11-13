@@ -23,8 +23,19 @@ class CompactHelpFormatter(argparse.RawDescriptionHelpFormatter):
         return usage_str + "\n"
 
 
-from pia_nm.config import ConfigManager
-from pia_nm.api_client import PIAClient
+from pia_nm.logging_config import setup_logging
+from pia_nm.error_handling import (
+    handle_error,
+    log_operation_start,
+    log_operation_success,
+    log_operation_failure,
+    log_api_operation,
+    log_nm_operation,
+    log_file_operation,
+    print_error,
+)
+from pia_nm.config import ConfigManager, ConfigError
+from pia_nm.api_client import PIAClient, AuthenticationError, NetworkError, APIError
 from pia_nm.wireguard import (
     generate_keypair,
     save_keypair,
@@ -47,31 +58,6 @@ from pia_nm.systemd_manager import (
     enable_timer,
     disable_timer,
 )
-
-
-def setup_logging(verbose: bool = False) -> None:
-    """Configure logging to file and console."""
-    log_dir = Path.home() / ".local/share/pia-nm/logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    log_level = logging.DEBUG if verbose else logging.INFO
-    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-
-    # File handler
-    file_handler = logging.FileHandler(log_dir / "pia-nm.log")
-    file_handler.setLevel(log_level)
-    file_handler.setFormatter(logging.Formatter(log_format))
-
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(log_level)
-    console_handler.setFormatter(logging.Formatter(log_format))
-
-    # Root logger
-    root_logger = logging.getLogger()
-    root_logger.setLevel(log_level)
-    root_logger.addHandler(file_handler)
-    root_logger.addHandler(console_handler)
 
 
 def check_system_dependencies() -> bool:
@@ -107,6 +93,7 @@ def cmd_setup() -> None:
     import getpass
 
     logger = logging.getLogger(__name__)
+    log_operation_start("setup command")
 
     print("\n" + "=" * 50)
     print("PIA NetworkManager Setup")
@@ -116,45 +103,75 @@ def cmd_setup() -> None:
     username = input("\nPIA Username: ").strip()
     if not username:
         print("✗ Username cannot be empty")
+        logger.warning("Setup cancelled: username empty")
         return
 
     password = getpass.getpass("PIA Password: ")
     if not password:
         print("✗ Password cannot be empty")
+        logger.warning("Setup cancelled: password empty")
         return
 
     # 2. Test authentication
     print("\nTesting credentials...")
     try:
+        log_api_operation("authenticate")
         api = PIAClient()
         token = api.authenticate(username, password)
         print("✓ Authentication successful")
-        logger.info("Authentication successful during setup")
+        log_operation_success("authentication")
+    except AuthenticationError as e:
+        print(f"✗ Authentication failed: {e}")
+        log_operation_failure("authentication", e)
+        print_error("auth_invalid_credentials")
+        return
+    except NetworkError as e:
+        print(f"✗ Network error: {e}")
+        log_operation_failure("authentication", e)
+        print_error("network_unreachable")
+        return
     except Exception as e:
         print(f"✗ Authentication failed: {e}")
-        logger.error(f"Authentication failed during setup: {e}")
+        log_operation_failure("authentication", e)
         return
 
     # 3. Store credentials
     try:
+        log_operation_start("storing credentials in keyring")
         config_mgr = ConfigManager()
         config_mgr.set_credentials(username, password)
         print("✓ Credentials stored in keyring")
-        logger.info("Credentials stored in keyring")
+        log_operation_success("credentials stored")
+    except ConfigError as e:
+        print(f"✗ Failed to store credentials: {e}")
+        log_operation_failure("store credentials", e)
+        print_error("keyring_unavailable")
+        return
     except Exception as e:
         print(f"✗ Failed to store credentials: {e}")
-        logger.error(f"Failed to store credentials: {e}")
+        log_operation_failure("store credentials", e)
         return
 
     # 4. Get available regions
     print("\nFetching available regions...")
     try:
+        log_api_operation("get_regions")
         regions = api.get_regions()
         print(f"✓ Found {len(regions)} regions")
-        logger.info(f"Retrieved {len(regions)} regions from PIA API")
+        log_operation_success("fetch regions", f"count={len(regions)}")
+    except NetworkError as e:
+        print(f"✗ Network error: {e}")
+        log_operation_failure("fetch regions", e)
+        print_error("network_unreachable")
+        return
+    except APIError as e:
+        print(f"✗ API error: {e}")
+        log_operation_failure("fetch regions", e)
+        print_error("key_registration_failed")
+        return
     except Exception as e:
         print(f"✗ Failed to fetch regions: {e}")
-        logger.error(f"Failed to fetch regions: {e}")
+        log_operation_failure("fetch regions", e)
         return
 
     # 5. Display and select regions
@@ -171,6 +188,7 @@ def cmd_setup() -> None:
 
     if not selected_input:
         print("✗ No regions selected")
+        logger.warning("Setup cancelled: no regions selected")
         return
 
     selected_ids = [s.strip() for s in selected_input.split(",")]
@@ -181,7 +199,10 @@ def cmd_setup() -> None:
 
     if invalid_ids:
         print(f"✗ Invalid region IDs: {', '.join(invalid_ids)}")
+        logger.error(f"Invalid region IDs: {invalid_ids}")
         return
+
+    logger.info(f"Selected regions for setup: {selected_ids}")
 
     # 6. Create profiles for each region
     print("\nCreating profiles...")
@@ -190,19 +211,25 @@ def cmd_setup() -> None:
     for region_id in selected_ids:
         try:
             print(f"  Setting up {region_id}...", end=" ", flush=True)
+            log_operation_start(f"setup region {region_id}")
 
             # Load or generate keypair
             try:
                 private_key, public_key = load_keypair(region_id)
+                logger.debug(f"Loaded existing keypair for region: {region_id}")
             except FileNotFoundError:
+                log_operation_start(f"generate keypair for {region_id}")
                 private_key, public_key = generate_keypair()
                 save_keypair(region_id, private_key, public_key)
+                log_operation_success(f"generate keypair for {region_id}")
 
             # Register key with PIA
+            log_api_operation("register_key", region_id)
             conn_details = api.register_key(token, public_key, region_id)
 
             # Create NetworkManager profile
             profile_name = format_profile_name(region_id)
+            log_nm_operation("create_profile", profile_name)
             success = create_profile(
                 profile_name,
                 {
@@ -217,21 +244,23 @@ def cmd_setup() -> None:
             if success:
                 print("✓")
                 successful_regions.append(region_id)
-                logger.info(f"Successfully configured region: {region_id}")
+                log_operation_success(f"setup region {region_id}")
             else:
                 print("✗")
-                logger.error(f"Failed to create profile for region: {region_id}")
+                log_operation_failure(f"setup region {region_id}", Exception("profile creation failed"))
 
         except Exception as e:
             print(f"✗ ({e})")
-            logger.error(f"Failed to setup region {region_id}: {e}")
+            log_operation_failure(f"setup region {region_id}", e)
 
     if not successful_regions:
         print("✗ No regions were successfully configured")
+        logger.error("Setup failed: no regions successfully configured")
         return
 
     # 7. Save config
     try:
+        log_operation_start("save configuration")
         config_mgr = ConfigManager()
         config_mgr.save(
             {
@@ -241,21 +270,27 @@ def cmd_setup() -> None:
             }
         )
         print(f"✓ Configuration saved ({len(successful_regions)} regions)")
-        logger.info(f"Configuration saved with {len(successful_regions)} regions")
+        log_operation_success("save configuration", f"regions={len(successful_regions)}")
+    except ConfigError as e:
+        print(f"✗ Failed to save configuration: {e}")
+        log_operation_failure("save configuration", e)
+        print_error("config_invalid")
+        return
     except Exception as e:
         print(f"✗ Failed to save configuration: {e}")
-        logger.error(f"Failed to save configuration: {e}")
+        log_operation_failure("save configuration", e)
         return
 
     # 8. Install systemd units
     print("\nInstalling systemd timer...")
     try:
+        log_operation_start("install systemd units")
         install_units()
         print("✓ Systemd timer installed")
-        logger.info("Systemd timer installed successfully")
+        log_operation_success("install systemd units")
     except Exception as e:
         print(f"✗ Failed to install systemd timer: {e}")
-        logger.error(f"Failed to install systemd timer: {e}")
+        log_operation_failure("install systemd units", e)
         return
 
     # Success message
@@ -270,16 +305,19 @@ def cmd_setup() -> None:
     print("  • Connect via NetworkManager GUI")
     print("  • Manually refresh: pia-nm refresh")
     print("\nToken refresh runs automatically every 12 hours.")
+    log_operation_success("setup command")
 
 
 def cmd_list_regions(port_forwarding: bool = False) -> None:
     """List available PIA regions."""
     logger = logging.getLogger(__name__)
+    log_operation_start("list-regions command", f"port_forwarding={port_forwarding}")
 
     try:
+        log_api_operation("get_regions")
         api = PIAClient()
         regions = api.get_regions()
-        logger.info(f"Retrieved {len(regions)} regions from PIA API")
+        log_operation_success("fetch regions", f"count={len(regions)}")
 
         if port_forwarding:
             regions = [r for r in regions if r.get("port_forward")]
@@ -296,22 +334,42 @@ def cmd_list_regions(port_forwarding: bool = False) -> None:
                 f"{region['id']:<20} {region['name']:<30} {region['country']:<10} {pf:<12}"
             )
 
+        log_operation_success("list-regions command")
+
+    except NetworkError as e:
+        print(f"✗ Network error: {e}")
+        log_operation_failure("fetch regions", e)
+        print_error("network_unreachable")
+        sys.exit(1)
+    except APIError as e:
+        print(f"✗ API error: {e}")
+        log_operation_failure("fetch regions", e)
+        print_error("key_registration_failed")
+        sys.exit(1)
     except Exception as e:
         print(f"✗ Failed to list regions: {e}")
-        logger.error(f"Failed to list regions: {e}")
+        log_operation_failure("fetch regions", e)
         sys.exit(1)
 
 
 def cmd_refresh(region: Optional[str] = None) -> None:
     """Refresh authentication tokens."""
     logger = logging.getLogger(__name__)
+    log_operation_start("refresh command", f"region={region}" if region else "all regions")
 
     try:
+        log_operation_start("load configuration")
         config_mgr = ConfigManager()
         config = config_mgr.load()
+        log_operation_success("load configuration")
+    except ConfigError as e:
+        print(f"✗ Failed to load configuration: {e}")
+        log_operation_failure("load configuration", e)
+        print_error("config_not_found")
+        sys.exit(1)
     except Exception as e:
         print(f"✗ Failed to load configuration: {e}")
-        logger.error(f"Failed to load configuration: {e}")
+        log_operation_failure("load configuration", e)
         sys.exit(1)
 
     regions_to_refresh = [region] if region else config.get("regions", [])
@@ -321,22 +379,42 @@ def cmd_refresh(region: Optional[str] = None) -> None:
         logger.warning("No regions configured for refresh")
         return
 
+    logger.info(f"Refreshing {len(regions_to_refresh)} region(s)")
+
     # Get credentials
     try:
+        log_operation_start("retrieve credentials from keyring")
         username, password = config_mgr.get_credentials()
+        log_operation_success("retrieve credentials")
+    except ConfigError as e:
+        print(f"✗ Failed to retrieve credentials: {e}")
+        log_operation_failure("retrieve credentials", e)
+        print_error("keyring_unavailable")
+        sys.exit(1)
     except Exception as e:
         print(f"✗ Failed to retrieve credentials: {e}")
-        logger.error(f"Failed to retrieve credentials: {e}")
+        log_operation_failure("retrieve credentials", e)
         sys.exit(1)
 
     # Authenticate
     try:
+        log_api_operation("authenticate")
         api = PIAClient()
         token = api.authenticate(username, password)
-        logger.info("Authentication successful for token refresh")
+        log_operation_success("authentication for refresh")
+    except AuthenticationError as e:
+        print(f"✗ Authentication failed: {e}")
+        log_operation_failure("authentication", e)
+        print_error("auth_invalid_credentials")
+        sys.exit(1)
+    except NetworkError as e:
+        print(f"✗ Network error: {e}")
+        log_operation_failure("authentication", e)
+        print_error("network_unreachable")
+        sys.exit(1)
     except Exception as e:
         print(f"✗ Authentication failed: {e}")
-        logger.error(f"Authentication failed during refresh: {e}")
+        log_operation_failure("authentication", e)
         sys.exit(1)
 
     # Refresh each region
@@ -347,29 +425,34 @@ def cmd_refresh(region: Optional[str] = None) -> None:
     for region_id in regions_to_refresh:
         try:
             print(f"  {region_id}...", end=" ", flush=True)
+            log_operation_start(f"refresh region {region_id}")
 
             # Load keypair
             try:
                 private_key, public_key = load_keypair(region_id)
+                logger.debug(f"Loaded keypair for region: {region_id}")
             except FileNotFoundError:
                 print("✗ (keypair not found)")
-                logger.error(f"Keypair not found for region: {region_id}")
+                log_operation_failure(f"refresh region {region_id}", Exception("keypair not found"))
                 failed += 1
                 continue
 
             # Check if rotation needed
             if should_rotate_key(region_id):
-                logger.info(f"Rotating key for region: {region_id}")
+                log_operation_start(f"rotate key for {region_id}")
                 private_key, public_key = generate_keypair()
                 save_keypair(region_id, private_key, public_key)
+                log_operation_success(f"rotate key for {region_id}")
 
             # Register key
+            log_api_operation("register_key", region_id)
             conn_details = api.register_key(token, public_key, region_id)
 
             # Update profile
             profile_name = format_profile_name(region_id)
             was_active = is_active(profile_name)
 
+            log_nm_operation("update_profile", profile_name)
             success = update_profile(
                 profile_name,
                 {
@@ -384,29 +467,31 @@ def cmd_refresh(region: Optional[str] = None) -> None:
             if success:
                 print("✓")
                 if was_active:
-                    logger.info(f"Updated {region_id} (connection was active)")
+                    log_operation_success(f"refresh region {region_id}", "connection was active")
                 else:
-                    logger.info(f"Updated {region_id}")
+                    log_operation_success(f"refresh region {region_id}")
                 successful += 1
             else:
                 print("✗")
-                logger.error(f"Failed to update profile for region: {region_id}")
+                log_operation_failure(f"refresh region {region_id}", Exception("profile update failed"))
                 failed += 1
 
         except Exception as e:
             print(f"✗ ({e})")
-            logger.error(f"Failed to refresh region {region_id}: {e}")
+            log_operation_failure(f"refresh region {region_id}", e)
             failed += 1
 
     # Update last refresh timestamp
     try:
+        log_operation_start("update last_refresh timestamp")
         config_mgr.update_last_refresh()
-        logger.info("Updated last_refresh timestamp")
+        log_operation_success("update last_refresh timestamp")
     except Exception as e:
         logger.warning(f"Failed to update last_refresh timestamp: {e}")
 
     # Summary
     print(f"\n✓ Refresh complete: {successful} successful, {failed} failed")
+    log_operation_success("refresh command", f"successful={successful}, failed={failed}")
     if failed > 0:
         sys.exit(1)
 
@@ -414,9 +499,11 @@ def cmd_refresh(region: Optional[str] = None) -> None:
 def cmd_add_region(region_id: str) -> None:
     """Add a new region."""
     logger = logging.getLogger(__name__)
+    log_operation_start("add-region command", f"region={region_id}")
 
     # Verify region exists
     try:
+        log_api_operation("get_regions")
         api = PIAClient()
         regions = api.get_regions()
         region_ids = {r["id"] for r in regions}
@@ -429,50 +516,59 @@ def cmd_add_region(region_id: str) -> None:
         logger.info(f"Verified region exists: {region_id}")
     except Exception as e:
         print(f"✗ Failed to verify region: {e}")
-        logger.error(f"Failed to verify region: {e}")
+        log_operation_failure("verify region", e)
         sys.exit(1)
 
     # Get credentials
     try:
+        log_operation_start("retrieve credentials")
         config_mgr = ConfigManager()
         username, password = config_mgr.get_credentials()
+        log_operation_success("retrieve credentials")
     except Exception as e:
         print(f"✗ Failed to retrieve credentials: {e}")
-        logger.error(f"Failed to retrieve credentials: {e}")
+        log_operation_failure("retrieve credentials", e)
+        print_error("keyring_unavailable")
         sys.exit(1)
 
     # Authenticate
     try:
+        log_api_operation("authenticate")
         token = api.authenticate(username, password)
-        logger.info("Authentication successful for add-region")
+        log_operation_success("authentication for add-region")
     except Exception as e:
         print(f"✗ Authentication failed: {e}")
-        logger.error(f"Authentication failed during add-region: {e}")
+        log_operation_failure("authentication", e)
+        print_error("auth_invalid_credentials")
         sys.exit(1)
 
     # Generate keypair
     try:
         print(f"Setting up {region_id}...", end=" ", flush=True)
+        log_operation_start(f"generate keypair for {region_id}")
         private_key, public_key = generate_keypair()
         save_keypair(region_id, private_key, public_key)
-        logger.info(f"Generated keypair for region: {region_id}")
+        log_operation_success(f"generate keypair for {region_id}")
     except Exception as e:
         print(f"✗ ({e})")
-        logger.error(f"Failed to generate keypair: {e}")
+        log_operation_failure(f"generate keypair", e)
         sys.exit(1)
 
     # Register key
     try:
+        log_api_operation("register_key", region_id)
         conn_details = api.register_key(token, public_key, region_id)
-        logger.info(f"Registered key with PIA for region: {region_id}")
+        log_operation_success("register key", region_id)
     except Exception as e:
         print(f"✗ ({e})")
-        logger.error(f"Failed to register key: {e}")
+        log_operation_failure("register key", e)
+        print_error("key_registration_failed")
         sys.exit(1)
 
     # Create profile
     try:
         profile_name = format_profile_name(region_id)
+        log_nm_operation("create_profile", profile_name)
         success = create_profile(
             profile_name,
             {
@@ -486,41 +582,50 @@ def cmd_add_region(region_id: str) -> None:
 
         if not success:
             print("✗")
-            logger.error(f"Failed to create profile for region: {region_id}")
+            log_operation_failure(f"create profile", Exception("profile creation failed"))
+            print_error("nm_operation_failed")
             sys.exit(1)
 
         print("✓")
-        logger.info(f"Created NetworkManager profile for region: {region_id}")
+        log_operation_success(f"create profile for {region_id}")
     except Exception as e:
         print(f"✗ ({e})")
-        logger.error(f"Failed to create profile: {e}")
+        log_operation_failure("create profile", e)
+        print_error("nm_operation_failed")
         sys.exit(1)
 
     # Add to config
     try:
+        log_operation_start("update configuration")
         config = config_mgr.load()
         if region_id not in config.get("regions", []):
             config["regions"].append(region_id)
             config_mgr.save(config)
-            logger.info(f"Added region to configuration: {region_id}")
+            log_operation_success("update configuration", f"added {region_id}")
     except Exception as e:
         print(f"✗ Failed to update configuration: {e}")
-        logger.error(f"Failed to update configuration: {e}")
+        log_operation_failure("update configuration", e)
+        print_error("config_invalid")
         sys.exit(1)
 
     print(f"✓ Region '{region_id}' added successfully")
+    log_operation_success("add-region command")
 
 
 def cmd_remove_region(region_id: str) -> None:
     """Remove a region."""
     logger = logging.getLogger(__name__)
+    log_operation_start("remove-region command", f"region={region_id}")
 
     try:
+        log_operation_start("load configuration")
         config_mgr = ConfigManager()
         config = config_mgr.load()
+        log_operation_success("load configuration")
     except Exception as e:
         print(f"✗ Failed to load configuration: {e}")
-        logger.error(f"Failed to load configuration: {e}")
+        log_operation_failure("load configuration", e)
+        print_error("config_not_found")
         sys.exit(1)
 
     if region_id not in config.get("regions", []):
@@ -531,44 +636,54 @@ def cmd_remove_region(region_id: str) -> None:
     # Delete profile
     try:
         profile_name = format_profile_name(region_id)
+        log_nm_operation("delete_profile", profile_name)
         success = delete_profile(profile_name)
         if success:
-            logger.info(f"Deleted NetworkManager profile for region: {region_id}")
+            log_operation_success(f"delete profile for {region_id}")
     except Exception as e:
         print(f"✗ Failed to delete profile: {e}")
-        logger.error(f"Failed to delete profile: {e}")
+        log_operation_failure("delete profile", e)
+        print_error("nm_operation_failed")
         sys.exit(1)
 
     # Remove from config
     try:
+        log_operation_start("update configuration")
         config["regions"].remove(region_id)
         config_mgr.save(config)
-        logger.info(f"Removed region from configuration: {region_id}")
+        log_operation_success("update configuration", f"removed {region_id}")
     except Exception as e:
         print(f"✗ Failed to update configuration: {e}")
-        logger.error(f"Failed to update configuration: {e}")
+        log_operation_failure("update configuration", e)
+        print_error("config_invalid")
         sys.exit(1)
 
     # Delete keypair
     try:
+        log_file_operation("delete", f"~/.config/pia-nm/keys/{region_id}.key")
         delete_keypair(region_id)
-        logger.info(f"Deleted keypair for region: {region_id}")
+        log_operation_success(f"delete keypair for {region_id}")
     except Exception as e:
         logger.warning(f"Failed to delete keypair: {e}")
 
     print(f"✓ Region '{region_id}' removed successfully")
+    log_operation_success("remove-region command")
 
 
 def cmd_status() -> None:
     """Show status of configured regions and timer."""
     logger = logging.getLogger(__name__)
+    log_operation_start("status command")
 
     try:
+        log_operation_start("load configuration")
         config_mgr = ConfigManager()
         config = config_mgr.load()
+        log_operation_success("load configuration")
     except Exception as e:
         print(f"✗ Failed to load configuration: {e}")
-        logger.error(f"Failed to load configuration: {e}")
+        log_operation_failure("load configuration", e)
+        print_error("config_not_found")
         sys.exit(1)
 
     regions = config.get("regions", [])
@@ -587,6 +702,7 @@ def cmd_status() -> None:
 
             status = "✓ Active" if active else ("✓ Exists" if exists else "✗ Missing")
             print(f"  • {region_id:<20} {status}")
+            logger.debug(f"Region {region_id}: exists={exists}, active={active}")
     else:
         print("  (none configured)")
 
@@ -594,34 +710,41 @@ def cmd_status() -> None:
 
     # Check timer status
     try:
+        log_operation_start("check systemd timer status")
         timer_status = check_timer_status()
         print(f"\nSystemd timer: {timer_status.get('status', 'Unknown')}")
         if timer_status.get("next_run"):
             print(f"Next refresh: {timer_status['next_run']}")
+        log_operation_success("check systemd timer status")
     except Exception as e:
         print(f"\nSystemd timer: Error ({e})")
         logger.warning(f"Failed to check timer status: {e}")
 
     print()
+    log_operation_success("status command")
 
 
 def cmd_install() -> None:
     """Install systemd units."""
     logger = logging.getLogger(__name__)
+    log_operation_start("install command")
 
     try:
+        log_operation_start("install systemd units")
         install_units()
         print("✓ Systemd timer installed and enabled")
-        logger.info("Systemd units installed successfully")
+        log_operation_success("install systemd units")
+        log_operation_success("install command")
     except Exception as e:
         print(f"✗ Failed to install systemd units: {e}")
-        logger.error(f"Failed to install systemd units: {e}")
+        log_operation_failure("install systemd units", e)
         sys.exit(1)
 
 
 def cmd_uninstall() -> None:
     """Uninstall and remove all components."""
     logger = logging.getLogger(__name__)
+    log_operation_start("uninstall command")
 
     # Confirm with user
     print("\n" + "=" * 50)
@@ -636,38 +759,43 @@ def cmd_uninstall() -> None:
     confirm = input("\nContinue? (yes/no): ").strip().lower()
     if confirm != "yes":
         print("Uninstall cancelled")
+        logger.info("Uninstall cancelled by user")
         return
 
     # Remove profiles
     print("\nRemoving profiles...")
     try:
+        log_operation_start("load configuration for uninstall")
         config_mgr = ConfigManager()
         config = config_mgr.load()
         regions = config.get("regions", [])
+        log_operation_success("load configuration for uninstall")
 
         for region_id in regions:
             profile_name = format_profile_name(region_id)
             try:
+                log_nm_operation("delete_profile", profile_name)
                 delete_profile(profile_name)
                 print(f"  ✓ Removed {profile_name}")
-                logger.info(f"Removed profile: {profile_name}")
+                log_operation_success(f"delete profile {profile_name}")
             except Exception as e:
                 print(f"  ✗ Failed to remove {profile_name}: {e}")
-                logger.error(f"Failed to remove profile {profile_name}: {e}")
+                log_operation_failure(f"delete profile {profile_name}", e)
 
     except Exception as e:
         print(f"✗ Failed to load configuration: {e}")
-        logger.error(f"Failed to load configuration: {e}")
+        log_operation_failure("load configuration for uninstall", e)
 
     # Uninstall systemd units
     print("\nRemoving systemd units...")
     try:
+        log_operation_start("uninstall systemd units")
         uninstall_units()
         print("  ✓ Removed systemd timer and service")
-        logger.info("Removed systemd units")
+        log_operation_success("uninstall systemd units")
     except Exception as e:
         print(f"  ✗ Failed to remove systemd units: {e}")
-        logger.error(f"Failed to remove systemd units: {e}")
+        log_operation_failure("uninstall systemd units", e)
 
     # Delete config directory
     print("\nRemoving configuration...")
@@ -676,22 +804,24 @@ def cmd_uninstall() -> None:
         if config_dir.exists():
             import shutil
 
+            log_file_operation("delete", str(config_dir))
             shutil.rmtree(config_dir)
             print(f"  ✓ Removed {config_dir}")
-            logger.info(f"Removed configuration directory: {config_dir}")
+            log_operation_success(f"delete configuration directory")
     except Exception as e:
         print(f"  ✗ Failed to remove configuration: {e}")
-        logger.error(f"Failed to remove configuration: {e}")
+        log_operation_failure("delete configuration directory", e)
 
     # Remove credentials from keyring
     print("\nRemoving credentials...")
     try:
         import keyring
 
+        log_operation_start("remove credentials from keyring")
         keyring.delete_password("pia-nm", "username")
         keyring.delete_password("pia-nm", "password")
         print("  ✓ Removed credentials from keyring")
-        logger.info("Removed credentials from keyring")
+        log_operation_success("remove credentials from keyring")
     except Exception as e:
         print(f"  ✗ Failed to remove credentials: {e}")
         logger.warning(f"Failed to remove credentials: {e}")
@@ -699,33 +829,40 @@ def cmd_uninstall() -> None:
     print("\n" + "=" * 50)
     print("✓ Uninstall Complete")
     print("=" * 50)
+    log_operation_success("uninstall command")
 
 
 def cmd_enable() -> None:
     """Enable the systemd timer."""
     logger = logging.getLogger(__name__)
+    log_operation_start("enable command")
 
     try:
+        log_operation_start("enable systemd timer")
         enable_timer()
         print("✓ Systemd timer enabled")
-        logger.info("Systemd timer enabled")
+        log_operation_success("enable systemd timer")
+        log_operation_success("enable command")
     except Exception as e:
         print(f"✗ Failed to enable timer: {e}")
-        logger.error(f"Failed to enable timer: {e}")
+        log_operation_failure("enable systemd timer", e)
         sys.exit(1)
 
 
 def cmd_disable() -> None:
     """Disable the systemd timer."""
     logger = logging.getLogger(__name__)
+    log_operation_start("disable command")
 
     try:
+        log_operation_start("disable systemd timer")
         disable_timer()
         print("✓ Systemd timer disabled")
-        logger.info("Systemd timer disabled")
+        log_operation_success("disable systemd timer")
+        log_operation_success("disable command")
     except Exception as e:
         print(f"✗ Failed to disable timer: {e}")
-        logger.error(f"Failed to disable timer: {e}")
+        log_operation_failure("disable systemd timer", e)
         sys.exit(1)
 
 
@@ -803,9 +940,11 @@ def main() -> None:
     # Setup logging
     setup_logging(args.verbose)
     logger = logging.getLogger(__name__)
+    logger.info(f"pia-nm started (verbose={args.verbose})")
 
     # Check system dependencies
     if not check_system_dependencies():
+        logger.error("System dependencies check failed")
         sys.exit(1)
 
     # Route to appropriate handler
