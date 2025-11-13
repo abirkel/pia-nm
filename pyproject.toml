@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pia-nm"
 version = "0.1.0"
-description = "PIA WireGuard integration for NetworkManager on immutable Linux distributions"
+description = "Automated WireGuard token refresh for Private Internet Access (PIA) VPN in NetworkManager"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
     {name = "PIA-NM Contributors"}
 ]
 requires-python = ">=3.9"
-keywords = ["vpn", "wireguard", "networkmanager", "pia", "private-internet-access"]
+keywords = ["vpn", "wireguard", "networkmanager", "pia", "private-internet-access", "automation", "token-refresh"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",

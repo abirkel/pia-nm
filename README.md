@@ -1,12 +1,12 @@
 # PIA NetworkManager Integration (pia-nm)
 
-Automate WireGuard token refresh for Private Internet Access (PIA) VPN in NetworkManager on immutable Linux distributions.
+Automated WireGuard token refresh for Private Internet Access (PIA) VPN in NetworkManager.
 
 ## Overview
 
-**pia-nm** is a Python-based automation tool that maintains fresh WireGuard connection profiles for PIA in NetworkManager. It solves the problem that PIA's official VPN client is unavailable on immutable distributions (Aurora, Bluefin, Silverblue), and manual WireGuard configuration requires token refresh every 24 hours.
+**pia-nm** is a Python-based automation tool that maintains fresh WireGuard connection profiles for PIA in NetworkManager. Instead of manually refreshing tokens every 24 hours or relying on the official PIA client, pia-nm automates the entire process via systemd timer.
 
-The tool automates token refresh via systemd timer while integrating with NetworkManager, providing users with a native Linux VPN experience including GUI integration, automatic reconnection, and system settings integration.
+Whether you can't use the official PIA client, prefer native Linux integration, or simply want a hands-off VPN setup, pia-nm provides automated token refresh while integrating seamlessly with NetworkManager for a native Linux VPN experience including GUI integration, automatic reconnection, and system settings integration.
 
 ## Features
 
@@ -15,7 +15,6 @@ The tool automates token refresh via systemd timer while integrating with Networ
 - **Active Connection Preservation**: Token refresh happens without disconnecting active VPNs
 - **Secure Credential Storage**: Credentials stored in system keyring, never in plaintext
 - **NetworkManager Integration**: VPN profiles appear in NetworkManager GUI
-- **Immutable Distribution Support**: Works on Fedora Silverblue, Aurora, Bluefin, and similar
 - **Easy Setup**: Interactive setup wizard guides initial configuration
 - **Comprehensive Logging**: Detailed logs for troubleshooting
 
@@ -23,7 +22,7 @@ The tool automates token refresh via systemd timer while integrating with Networ
 
 ### System Requirements
 
-- **OS**: Fedora Silverblue, Aurora, Bluefin, or similar immutable Linux distribution
+- **OS**: Any Linux distribution with NetworkManager and systemd
 - **Python**: 3.9 or later
 - **NetworkManager**: With WireGuard support
 - **systemd**: For timer-based automation
@@ -416,4 +415,4 @@ For issues, questions, or suggestions, please open an issue on GitHub.
 
 ---
 
-**Note**: This tool is not affiliated with Private Internet Access. It is a community project to improve VPN usability on immutable Linux distributions.
+**Note**: This tool is not affiliated with Private Internet Access. It is a community project created with immutable Linux distributions in mind, but works on any Linux system with NetworkManager and systemd.
