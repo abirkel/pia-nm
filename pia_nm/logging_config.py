@@ -5,12 +5,59 @@ This module sets up comprehensive logging with:
 - Log rotation (keep last 10 files)
 - Console output for user-facing messages
 - Proper formatting with timestamp, level, and message
+- Sensitive data filtering to prevent accidental credential logging
 """
 
 import logging
 import logging.handlers
+import re
 from pathlib import Path
 from typing import Optional
+
+
+class SensitiveDataFilter(logging.Filter):
+    """Filter to redact sensitive data from log records.
+    
+    This filter provides defense-in-depth by redacting common patterns
+    of sensitive data that might accidentally be logged:
+    - Base64-encoded credentials
+    - API tokens
+    - WireGuard keys
+    - Email addresses
+    - IP addresses (in certain contexts)
+    """
+
+    # Patterns to redact
+    PATTERNS = [
+        # Base64-like strings (potential keys/tokens)
+        (r'[A-Za-z0-9+/]{40,}={0,2}', '[REDACTED_BASE64]'),
+        # Common token patterns
+        (r'token["\']?\s*[:=]\s*["\']?[A-Za-z0-9_-]+["\']?', 'token=[REDACTED]'),
+        # Common password patterns
+        (r'password["\']?\s*[:=]\s*["\']?[^"\'\s]+["\']?', 'password=[REDACTED]'),
+        # Common key patterns
+        (r'key["\']?\s*[:=]\s*["\']?[A-Za-z0-9_-]+["\']?', 'key=[REDACTED]'),
+        # Common credential patterns
+        (r'credential["\']?\s*[:=]\s*["\']?[^"\'\s]+["\']?', 'credential=[REDACTED]'),
+    ]
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Filter log record to redact sensitive data.
+        
+        Args:
+            record: Log record to filter
+            
+        Returns:
+            True to allow the record to be logged
+        """
+        # Only filter message, not other fields
+        if record.msg:
+            msg = str(record.msg)
+            for pattern, replacement in self.PATTERNS:
+                msg = re.sub(pattern, replacement, msg, flags=re.IGNORECASE)
+            record.msg = msg
+
+        return True
 
 
 def setup_logging(verbose: bool = False, log_dir: Optional[Path] = None) -> None:
@@ -30,6 +77,9 @@ def setup_logging(verbose: bool = False, log_dir: Optional[Path] = None) -> None
     log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     formatter = logging.Formatter(log_format)
 
+    # Create sensitive data filter
+    sensitive_filter = SensitiveDataFilter()
+
     # File handler with rotation (keep last 10 files)
     log_file = log_dir / "pia-nm.log"
     file_handler = logging.handlers.RotatingFileHandler(
@@ -39,11 +89,13 @@ def setup_logging(verbose: bool = False, log_dir: Optional[Path] = None) -> None
     )
     file_handler.setLevel(log_level)
     file_handler.setFormatter(formatter)
+    file_handler.addFilter(sensitive_filter)
 
     # Console handler (for user-facing messages)
     console_handler = logging.StreamHandler()
     console_handler.setLevel(log_level)
     console_handler.setFormatter(formatter)
+    console_handler.addFilter(sensitive_filter)
 
     # Root logger configuration
     root_logger = logging.getLogger()

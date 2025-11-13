@@ -6,7 +6,7 @@ Automated WireGuard token refresh for Private Internet Access (PIA) VPN in Netwo
 
 **pia-nm** is a Python-based automation tool that maintains fresh WireGuard connection profiles for PIA in NetworkManager. Instead of manually refreshing tokens every 24 hours or relying on the official PIA client, pia-nm automates the entire process via systemd timer.
 
-Whether you can't use the official PIA client, prefer native Linux integration, or simply want a hands-off VPN setup, pia-nm provides automated token refresh while integrating seamlessly with NetworkManager for a native Linux VPN experience including GUI integration, automatic reconnection, and system settings integration.
+Whether you can't use the official PIA client, prefer native Linux integration, or simply want a hands-off VPN setup, pia-nm provides automated token refresh while integrating seamlessly with NetworkManager for a native Linux VPN experience.
 
 ## Features
 
@@ -16,24 +16,16 @@ Whether you can't use the official PIA client, prefer native Linux integration, 
 - **Secure Credential Storage**: Credentials stored in system keyring, never in plaintext
 - **NetworkManager Integration**: VPN profiles appear in NetworkManager GUI
 - **Easy Setup**: Interactive setup wizard guides initial configuration
-- **Comprehensive Logging**: Detailed logs for troubleshooting
 
 ## Requirements
-
-### System Requirements
 
 - **OS**: Any Linux distribution with NetworkManager and systemd
 - **Python**: 3.9 or later
 - **NetworkManager**: With WireGuard support
-- **systemd**: For timer-based automation
 - **wireguard-tools**: For WireGuard key generation
+- **Active PIA subscription**: Valid username and password
 
-### PIA Requirements
-
-- Active PIA subscription
-- Valid PIA username and password
-
-### Installation of System Dependencies
+### Install System Dependencies
 
 On Fedora-based systems:
 
@@ -43,8 +35,6 @@ sudo dnf install NetworkManager wireguard-tools systemd
 
 ## Installation
 
-### From Source
-
 ```bash
 # Clone the repository
 git clone https://github.com/user/pia-nm.git
@@ -52,19 +42,12 @@ cd pia-nm
 
 # Install in user directory
 pip install --user .
-
-# Or install in development mode
-pip install --user -e .
 ```
 
-### Verify Installation
+Verify installation:
 
 ```bash
-# Check if pia-nm is available
 pia-nm --help
-
-# Verify system dependencies
-pia-nm setup  # Will check for required commands
 ```
 
 ## Quick Start
@@ -75,32 +58,15 @@ pia-nm setup  # Will check for required commands
 pia-nm setup
 ```
 
-This interactive wizard will:
-- Prompt for your PIA username and password
-- Validate credentials with PIA API
-- Store credentials securely in system keyring
-- Query available PIA regions
-- Let you select regions to configure
-- Generate WireGuard keys for each region
-- Create NetworkManager profiles
-- Install systemd timer for automatic refresh
+This interactive wizard will guide you through:
+- Entering your PIA credentials
+- Selecting regions to configure
+- Creating NetworkManager profiles
+- Installing the automatic refresh timer
 
-### 2. View Status
+### 2. Connect via NetworkManager
 
-```bash
-pia-nm status
-```
-
-Shows:
-- Configured regions
-- Last token refresh time
-- NetworkManager profile status
-- Systemd timer status
-- Next scheduled refresh
-
-### 3. Connect via NetworkManager
-
-Use the NetworkManager GUI or CLI:
+Use the NetworkManager GUI (GNOME Settings, KDE Network Manager) or CLI:
 
 ```bash
 # List available connections
@@ -113,82 +79,29 @@ nmcli connection up PIA-US-East
 nmcli connection down PIA-US-East
 ```
 
-## Commands
-
-### setup
-Interactive setup wizard for initial configuration.
-
-```bash
-pia-nm setup
-```
-
-### list-regions
-List available PIA regions and their capabilities.
-
-```bash
-# Show all regions
-pia-nm list-regions
-
-# Show only regions with port forwarding
-pia-nm list-regions --port-forwarding
-```
-
-### refresh
-Manually refresh authentication tokens for all or specific regions.
-
-```bash
-# Refresh all regions
-pia-nm refresh
-
-# Refresh specific region
-pia-nm refresh --region us-east
-```
-
-### add-region
-Add a new region to your configuration.
-
-```bash
-pia-nm add-region us-west
-```
-
-### remove-region
-Remove a region from your configuration.
-
-```bash
-pia-nm remove-region us-west
-```
-
-### status
-Display current configuration and status.
+### 3. Check Status
 
 ```bash
 pia-nm status
 ```
 
-### install
-Install systemd timer for automatic token refresh.
+Shows configured regions, last refresh time, and timer status.
 
-```bash
-pia-nm install
-```
+## Commands
 
-### uninstall
-Remove all pia-nm components and clean up.
+| Command | Purpose |
+|---------|---------|
+| `pia-nm setup` | Interactive setup wizard |
+| `pia-nm list-regions` | Show available PIA regions |
+| `pia-nm refresh` | Manually refresh tokens |
+| `pia-nm add-region <id>` | Add a new region |
+| `pia-nm remove-region <id>` | Remove a region |
+| `pia-nm status` | Show current status |
+| `pia-nm install` | Install systemd timer |
+| `pia-nm uninstall` | Remove all components |
+| `pia-nm enable/disable` | Control automatic refresh |
 
-```bash
-pia-nm uninstall
-```
-
-### enable / disable
-Enable or disable the automatic refresh timer.
-
-```bash
-# Enable automatic refresh
-pia-nm enable
-
-# Disable automatic refresh
-pia-nm disable
-```
+See [COMMANDS.md](COMMANDS.md) for detailed examples of each command.
 
 ## Configuration
 
@@ -240,163 +153,40 @@ journalctl --user -u pia-nm-refresh.service -f
 
 ## Troubleshooting
 
-### Authentication Failed
-
-Verify your PIA credentials:
-1. Visit https://www.privateinternetaccess.com/pages/login
-2. Confirm your username and password are correct
-3. Run `pia-nm setup` again
-
-### NetworkManager Errors
-
-Check if NetworkManager is running:
-
-```bash
-systemctl status NetworkManager
-```
-
-If a profile is corrupted, remove and recreate it:
-
-```bash
-pia-nm remove-region <region-id>
-pia-nm add-region <region-id>
-```
-
-### Network Connectivity Issues
-
-Check your internet connection:
-
-```bash
-ping 8.8.8.8
-```
-
-If you're behind a firewall, ensure outbound HTTPS (port 443) is allowed.
-
-### Systemd Timer Not Running
-
-Enable the timer:
-
-```bash
-systemctl --user enable --now pia-nm-refresh.timer
-```
-
-### View Detailed Logs
-
-```bash
-# View application logs
-tail -f ~/.local/share/pia-nm/logs/pia-nm.log
-
-# View systemd service logs
-journalctl --user -u pia-nm-refresh.service -f
-```
+Having issues? Check [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for detailed solutions to common problems.
 
 ## Security
 
 ### Credential Protection
 
-- Credentials stored in system keyring (never plaintext)
-- WireGuard private keys stored with 0600 permissions (user only)
-- Configuration files stored with 0600 permissions
-- Credentials never logged or displayed
-
-### File Permissions
-
-```
-~/.config/pia-nm/config.yaml         0600 (user only)
-~/.config/pia-nm/keys/*.key          0600 (user only)
-~/.config/pia-nm/keys/*.pub          0644 (readable)
-~/.local/share/pia-nm/logs/*.log     0644 (readable)
-```
+- **Keyring Storage**: Credentials stored in system keyring (never plaintext files)
+- **No Plaintext Config**: Passwords never stored in configuration files
+- **Private Key Protection**: WireGuard private keys stored with 0600 permissions (user only)
+- **Config File Protection**: Configuration files stored with 0600 permissions
+- **No Credential Logging**: Credentials never logged or displayed in any output
 
 ### API Communication
 
-- All PIA API communication uses HTTPS
-- TLS certificate validation enabled
-- Credentials sent via HTTP Basic Auth (over TLS)
+- **HTTPS Only**: All PIA API communication uses HTTPS
+- **Certificate Validation**: TLS certificate validation enabled by default
+- **Basic Auth**: Credentials sent via HTTP Basic Auth (over TLS only)
+- **No Token Logging**: Authentication tokens never logged or displayed
+- **Retry Logic**: Single immediate retry on network failures, then fail safely
 
-## Development
+### Key Management
 
-### Setup Development Environment
+- **Persistent Keys**: WireGuard keys are reused across token refreshes
+- **Key Rotation**: Keys rotated after 30 days or on registration failure
+- **Secure Generation**: Keys generated using system `wg` command (not Python crypto)
+- **Secure Storage**: Private keys stored with restrictive permissions
 
-```bash
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
+## FAQ
 
-# Install in development mode with dev dependencies
-pip install -e ".[dev]"
-```
-
-### Running Tests
-
-```bash
-pytest
-```
-
-### Code Quality
-
-```bash
-# Format code
-black pia_nm/
-
-# Type checking
-mypy pia_nm/
-
-# Linting
-pylint pia_nm/
-```
+See [FAQ.md](FAQ.md) for answers to common questions about setup, usage, security, and compatibility.
 
 ## Contributing
 
-Contributions are welcome! Please follow these guidelines:
-
-### Code Quality Standards
-
-**Style:**
-- Follow PEP 8 style guide
-- Use type hints (Python 3.9+ typing)
-- Docstrings for all public functions
-- Black formatter for consistency
-
-**Before Submitting:**
-
-1. Fork the repository
-2. Create a feature branch
-3. Write code with type hints and docstrings
-4. Write tests for new functionality
-5. Format code with Black:
-   ```bash
-   black pia_nm/
-   ```
-6. Run type checking:
-   ```bash
-   mypy pia_nm/
-   ```
-7. Run linting:
-   ```bash
-   pylint pia_nm/
-   ```
-8. Ensure all tests pass:
-   ```bash
-   pytest
-   ```
-9. Submit a pull request
-
-### Code Review Checklist
-
-- [ ] Type hints on all functions
-- [ ] Docstrings with clear descriptions
-- [ ] Error handling with specific exceptions
-- [ ] Logging at appropriate levels
-- [ ] No hardcoded paths or credentials
-- [ ] File permissions set correctly
-- [ ] Subprocess calls use `check=True`
-- [ ] Input validation for user data
-- [ ] Tests written and passing
-- [ ] No sensitive data in logs
-- [ ] Code formatted with Black
-- [ ] Passes mypy type checking
-- [ ] Passes pylint linting
+Interested in contributing? See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code standards, and contribution guidelines.
 
 ## License
 
