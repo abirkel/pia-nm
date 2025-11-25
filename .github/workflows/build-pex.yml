@@ -47,17 +47,6 @@ jobs:
           name: pia-nm-pex
           path: pia-nm.pex
 
-      - name: Debug token info
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          echo "Actor: ${{ github.actor }}"
-          echo "Repository owner: ${{ github.repository_owner }}"
-          echo "Event name: ${{ github.event_name }}"
-          echo "Ref: ${{ github.ref }}"
-          gh api user --jq '.login'
-        env:
-          GH_TOKEN: ${{ github.token }}
-
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         run: |
