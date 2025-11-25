@@ -35,17 +35,18 @@ sudo dnf install NetworkManager wireguard-tools systemd
 
 ## Installation
 
-Install directly from GitHub:
+Download the pre-built PEX executable (works on all systems, no pip needed):
 
 ```bash
-pip install git+https://github.com/abirkel/pia-nm.git
+curl -L -o pia-nm https://github.com/abirkel/pia-nm/releases/latest/download/pia-nm.pex
+chmod +x pia-nm
+mkdir -p ~/.local/bin
+mv pia-nm ~/.local/bin/
 ```
 
-Or without git:
+**Traditional Linux users**: You can also use pip if preferred: `pip install --user git+https://github.com/abirkel/pia-nm.git`
 
-```bash
-pip install https://github.com/abirkel/pia-nm/archive/refs/heads/main.tar.gz
-```
+See [INSTALL.md](INSTALL.md) for detailed instructions.
 
 Verify installation:
 
@@ -160,28 +161,10 @@ Having issues? Check [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for detailed solut
 
 ## Security
 
-### Credential Protection
-
-- **Keyring Storage**: Credentials stored in system keyring (never plaintext files)
-- **No Plaintext Config**: Passwords never stored in configuration files
-- **Private Key Protection**: WireGuard private keys stored with 0600 permissions (user only)
-- **Config File Protection**: Configuration files stored with 0600 permissions
-- **No Credential Logging**: Credentials never logged or displayed in any output
-
-### API Communication
-
-- **HTTPS Only**: All PIA API communication uses HTTPS
-- **Certificate Validation**: TLS certificate validation enabled by default
-- **Basic Auth**: Credentials sent via HTTP Basic Auth (over TLS only)
-- **No Token Logging**: Authentication tokens never logged or displayed
-- **Retry Logic**: Single immediate retry on network failures, then fail safely
-
-### Key Management
-
-- **Persistent Keys**: WireGuard keys are reused across token refreshes
-- **Key Rotation**: Keys rotated after 30 days or on registration failure
-- **Secure Generation**: Keys generated using system `wg` command (not Python crypto)
-- **Secure Storage**: Private keys stored with restrictive permissions
+- Credentials stored in system keyring (never plaintext)
+- All API communication over HTTPS
+- WireGuard keys stored with restrictive permissions (0600)
+- No credentials or tokens logged
 
 ## FAQ
 

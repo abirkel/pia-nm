@@ -1,0 +1,61 @@
+name: Build PEX
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install pex
+      run: pip install pex
+    
+    - name: Build PEX
+      run: |
+        pex . \
+          -r <(echo "requests>=2.31.0" && echo "keyring>=24.0.0" && echo "PyYAML>=6.0") \
+          -c pia-nm \
+          -o pia-nm.pex \
+          --python-shebang "/usr/bin/env python3"
+        chmod +x pia-nm.pex
+    
+    - name: Test PEX
+      run: |
+        ./pia-nm.pex --help
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: pia-nm-pex
+        path: pia-nm.pex
+    
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: pia-nm.pex
+        body: |
+          ## Installation
+          
+          Download `pia-nm.pex`, make it executable, and move to your PATH:
+          
+          ```bash
+          chmod +x pia-nm.pex
+          mkdir -p ~/.local/bin
+          mv pia-nm.pex ~/.local/bin/pia-nm
+          ```
+          
+          See [INSTALL.md](INSTALL.md) for detailed instructions.
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
