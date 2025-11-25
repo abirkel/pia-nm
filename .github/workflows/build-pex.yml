@@ -61,4 +61,4 @@ jobs:
 
           See [INSTALL.md](INSTALL.md) for detailed instructions."
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
