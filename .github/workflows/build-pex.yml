@@ -48,18 +48,17 @@ jobs:
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: pia-nm.pex
-          body: |
-            ## Installation
+        run: |
+          gh release create "${{ github.ref_name }}" pia-nm.pex \
+            --title "Release ${{ github.ref_name }}" \
+            --notes "Download \`pia-nm.pex\`, make it executable, and move to your PATH:
 
-            Download `pia-nm.pex`, make it executable, and move to your PATH:
+          \`\`\`bash
+          chmod +x pia-nm.pex
+          mkdir -p ~/.local/bin
+          mv pia-nm.pex ~/.local/bin/pia-nm
+          \`\`\`
 
-            ```bash
-            chmod +x pia-nm.pex
-            mkdir -p ~/.local/bin
-            mv pia-nm.pex ~/.local/bin/pia-nm
-            ```
-
-            See [INSTALL.md](INSTALL.md) for detailed instructions.
+          See [INSTALL.md](INSTALL.md) for detailed instructions."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
