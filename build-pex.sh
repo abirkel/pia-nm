@@ -22,7 +22,7 @@ fi
 
 # Clean previous builds
 rm -f pia-nm.pex
-rm -rf build/ dist/ *.egg-info
+rm -rf build/ dist/ ./*.egg-info
 
 # Build the PEX file
 pex . \
