@@ -78,12 +78,17 @@ def check_system_dependencies() -> bool:
     return True
 
 
-def format_profile_name(region_id: str) -> str:
-    """Format region ID into profile name."""
-    # Convert us-east -> PIA-US-East
-    parts = region_id.split("-")
-    formatted_parts = [part.upper() if len(part) <= 2 else part.title() for part in parts]
-    return f"PIA-{'-'.join(formatted_parts)}"
+def format_profile_name(region_name: str) -> str:
+    """Format region name into profile name.
+    
+    NetworkManager connection names are limited to 32 characters.
+    """
+    # Remove special characters and truncate if needed
+    # PIA- prefix (4 chars) + region name (max 28 chars)
+    clean_name = region_name.replace(" ", "-")
+    if len(clean_name) > 28:
+        clean_name = clean_name[:28]
+    return f"PIA-{clean_name}"
 
 
 def cmd_setup() -> None:
@@ -261,7 +266,8 @@ def cmd_setup() -> None:
             conn_details = api.register_key(token, public_key, server_hostname, server_ip)
 
             # Create NetworkManager profile
-            profile_name = format_profile_name(region_id)
+            region_name = region_data.get("name", region_id)
+            profile_name = format_profile_name(region_name)
             log_nm_operation("create_profile", profile_name)
             success = create_profile(
                 profile_name,
@@ -525,7 +531,8 @@ def cmd_refresh(region: Optional[str] = None) -> None:
             conn_details = api.register_key(token, public_key, server_hostname, server_ip)
 
             # Update profile
-            profile_name = format_profile_name(region_id)
+            region_name = region_data.get("name", region_id)
+            profile_name = format_profile_name(region_name)
             was_active = is_active(profile_name)
 
             log_nm_operation("update_profile", profile_name)
