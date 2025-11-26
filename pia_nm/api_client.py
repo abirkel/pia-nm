@@ -7,6 +7,7 @@ This module handles all communication with PIA's API endpoints:
 """
 
 import base64
+import json
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -226,7 +227,9 @@ class PIAClient:
             response.raise_for_status()
 
             try:
-                data = response.json()
+                # The endpoint returns multiple JSON objects, get only the first line
+                first_line = response.text.split('\n')[0]
+                data = json.loads(first_line)
                 if not isinstance(data, dict):
                     raise APIError("Response is not a JSON object")
             except ValueError as e:
