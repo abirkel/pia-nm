@@ -249,7 +249,8 @@ def cmd_setup() -> None:
             try:
                 private_key, public_key = load_keypair(region_id)
                 logger.debug("Loaded existing keypair for region: %s", region_id)
-            except FileNotFoundError:
+            except (FileNotFoundError, Exception):
+                # Generate new keypair if not found or loading fails
                 log_operation_start(f"generate keypair for {region_id}")
                 private_key, public_key = generate_keypair()
                 save_keypair(region_id, private_key, public_key)
