@@ -261,7 +261,7 @@ PersistentKeepalive = {keepalive}
                     "ipv4.dns-priority", "-100",
                     "ipv4.never-default", "no",
                     "ipv4.route-metric", "100",
-                    "ipv6.method", "ignore",
+                    "ipv6.method", "disabled",
                 ],
                 capture_output=True,
                 text=True,
