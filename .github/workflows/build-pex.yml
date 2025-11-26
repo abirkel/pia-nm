@@ -34,7 +34,8 @@ jobs:
             -r /tmp/pex-requirements.txt \
             -c pia-nm \
             -o pia-nm.pex \
-            --python-shebang "/usr/bin/env python3"
+            --python-shebang "/usr/bin/env python3" \
+            --interpreter-constraint ">=3.9,<4"
           chmod +x pia-nm.pex
 
       - name: Upload artifact
