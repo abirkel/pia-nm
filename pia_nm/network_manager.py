@@ -163,9 +163,7 @@ def create_profile(
 ) -> bool:
     """Create a new WireGuard connection profile in NetworkManager.
 
-    This function creates a WireGuard profile in two steps:
-    1. Create base connection with nmcli connection add
-    2. Configure WireGuard peer and network settings with nmcli connection modify
+    This function creates a WireGuard profile by importing a config file.
 
     Args:
         profile_name: Name for the connection profile (e.g., "PIA-US-East")
@@ -184,6 +182,9 @@ def create_profile(
     Raises:
         NetworkManagerError: If nmcli commands fail
     """
+    import tempfile
+    from pathlib import Path
+    
     try:
         # Extract config values
         private_key = config["private_key"]
@@ -200,75 +201,79 @@ def create_profile(
 
         logger.info("Creating WireGuard profile: %s", profile_name)
 
-        # Step 1: Create base WireGuard connection
-        logger.debug("Creating base connection: %s", profile_name)
-        result = subprocess.run(
-            [
-                "nmcli",
-                "connection",
-                "add",
-                "type",
-                "wireguard",
-                "con-name",
-                profile_name,
-                "ifname",
-                ifname,
-                "wireguard.private-key",
-                private_key,
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=10,
-        )
+        # Create WireGuard config file
+        dns_string = ",".join(dns_servers)
+        wg_config = f"""[Interface]
+PrivateKey = {private_key}
+Address = {peer_ip}/32
+DNS = {dns_string}
 
-        logger.debug("Base connection created: %s", result.stdout.strip())
+[Peer]
+PublicKey = {server_pubkey}
+Endpoint = {endpoint}
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = {keepalive}
+"""
 
-        # Step 2: Configure WireGuard peer and network settings
-        logger.debug("Configuring peer and network settings for: %s", profile_name)
+        # Write config to temporary file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(wg_config)
+            temp_config_path = f.name
 
-        # Build DNS string
-        dns_string = " ".join(dns_servers)
+        try:
+            # Import the WireGuard config
+            logger.debug("Importing WireGuard config for: %s", profile_name)
+            result = subprocess.run(
+                [
+                    "nmcli",
+                    "connection",
+                    "import",
+                    "type",
+                    "wireguard",
+                    "file",
+                    temp_config_path,
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=10,
+            )
 
-        # Configure peer using the correct nmcli syntax
-        # Format: wireguard.peers = 'public-key=<key>,endpoint=<ip:port>,allowed-ips=<ips>,persistent-keepalive=<seconds>'
-        peer_config = f"public-key={server_pubkey},endpoint={endpoint},allowed-ips=0.0.0.0/0,persistent-keepalive={keepalive}"
-        
-        modify_args = [
-            "nmcli",
-            "connection",
-            "modify",
-            profile_name,
-            "wireguard.listen-port",
-            str(listen_port),
-            "wireguard.peers",
-            peer_config,
-            "ipv4.method",
-            "manual",
-            "ipv4.addresses",
-            f"{peer_ip}/32",
-            "ipv4.dns",
-            dns_string,
-            "ipv4.dns-priority",
-            "-100",
-            "ipv4.ignore-auto-dns",
-            "yes",
-            "ipv6.method",
-            "disabled",
-            "connection.autoconnect",
-            "no",
-        ]
+            # Get the connection name that was created (nmcli uses filename as connection name)
+            imported_name = Path(temp_config_path).stem
+            
+            # Rename to our desired name if different
+            if imported_name != profile_name:
+                subprocess.run(
+                    ["nmcli", "connection", "modify", imported_name, "connection.id", profile_name],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    timeout=10,
+                )
+            
+            # Set additional properties
+            subprocess.run(
+                [
+                    "nmcli", "connection", "modify", profile_name,
+                    "connection.interface-name", ifname,
+                    "connection.autoconnect", "no",
+                    "ipv4.dns-priority", "-100",
+                    "ipv4.ignore-auto-dns", "yes",
+                    "ipv6.method", "disabled",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=10,
+            )
 
-        result = subprocess.run(
-            modify_args,
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=10,
-        )
+            logger.info("Successfully created profile: %s", profile_name)
+            return True
 
-        logger.info("Successfully created profile: %s", profile_name)
-        return True
+        finally:
+            # Clean up temp file
+            Path(temp_config_path).unlink(missing_ok=True)
 
     except subprocess.CalledProcessError as e:
         logger.error("nmcli failed to create profile %s: %s", profile_name, e.stderr)
@@ -291,9 +296,8 @@ def update_profile(
 ) -> bool:
     """Update an existing WireGuard connection profile in NetworkManager.
 
-    This function updates a profile using nmcli connection modify, which preserves
-    active connections. The active connection continues using the old configuration
-    until it reconnects, at which point it uses the updated configuration.
+    This function deletes and recreates the profile. Note: This will disconnect
+    active connections.
 
     Args:
         profile_name: Name of the connection profile to update
@@ -313,84 +317,34 @@ def update_profile(
         NetworkManagerError: If nmcli commands fail
     """
     try:
-        # Extract config values
-        private_key = config["private_key"]
-        server_pubkey = config["server_pubkey"]
-        endpoint = config["endpoint"]
-        peer_ip = config["peer_ip"]
-        dns_servers = config["dns_servers"]
-
         # Check if connection is active (for logging only)
         was_active = is_active(profile_name)
 
         if was_active:
-            logger.info("Profile %s is active, updating without disconnecting", profile_name)
+            logger.info("Profile %s is active, will be disconnected during update", profile_name)
         else:
             logger.info("Updating profile: %s", profile_name)
 
-        # Build DNS string
-        dns_string = " ".join(dns_servers)
-
-        # Configure peer using the correct nmcli syntax
-        # Format: wireguard.peers = 'public-key=<key>,endpoint=<ip:port>,allowed-ips=<ips>,persistent-keepalive=<seconds>'
-        peer_config = f"public-key={server_pubkey},endpoint={endpoint},allowed-ips=0.0.0.0/0,persistent-keepalive={keepalive}"
+        # Delete existing profile
+        delete_profile(profile_name)
         
-        # Update profile using modify (preserves active connections)
-        modify_args = [
-            "nmcli",
-            "connection",
-            "modify",
-            profile_name,
-            "wireguard.private-key",
-            private_key,
-            "wireguard.listen-port",
-            str(listen_port),
-            "wireguard.peers",
-            peer_config,
-            "ipv4.method",
-            "manual",
-            "ipv4.addresses",
-            f"{peer_ip}/32",
-            "ipv4.dns",
-            dns_string,
-            "ipv4.dns-priority",
-            "-100",
-            "ipv4.ignore-auto-dns",
-            "yes",
-            "ipv6.method",
-            "disabled",
-            "connection.autoconnect",
-            "no",
-        ]
-
-        result = subprocess.run(
-            modify_args,
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=10,
-        )
+        # Recreate with new config
+        success = create_profile(profile_name, config, listen_port, keepalive)
 
         if was_active:
             logger.info(
-                "Profile %s updated. New config will be used on next connection.", profile_name
+                "Profile %s updated. Connection was disconnected, reconnect manually.", profile_name
             )
         else:
             logger.info("Successfully updated profile: %s", profile_name)
 
-        return True
+        return success
 
-    except subprocess.CalledProcessError as e:
-        logger.error("nmcli failed to update profile %s: %s", profile_name, e.stderr)
-        raise NetworkManagerError(f"Failed to update profile {profile_name}: {e.stderr}") from e
-    except subprocess.TimeoutExpired as e:
-        logger.error("nmcli command timed out updating %s", profile_name)
-        raise NetworkManagerError(f"Profile update timed out: {profile_name}") from e
-    except FileNotFoundError as e:
-        logger.error("nmcli command not found")
-        raise NetworkManagerError(
-            "nmcli command not found. Install NetworkManager: sudo apt install network-manager"
-        ) from e
+    except NetworkManagerError:
+        raise
+    except Exception as e:
+        logger.error("Unexpected error updating profile %s: %s", profile_name, e)
+        raise NetworkManagerError(f"Failed to update profile {profile_name}: {e}") from e
 
 
 def delete_profile(profile_name: str) -> bool:
