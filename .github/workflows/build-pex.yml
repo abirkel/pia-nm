@@ -27,15 +27,10 @@ jobs:
 
       - name: Build PEX
         run: |
-          echo "requests>=2.31.0" > /tmp/pex-requirements.txt
-          echo "keyring>=24.0.0" >> /tmp/pex-requirements.txt
-          echo "PyYAML>=6.0" >> /tmp/pex-requirements.txt
           pex . \
-            -r /tmp/pex-requirements.txt \
             -c pia-nm \
             -o pia-nm.pex \
-            --python-shebang "/usr/bin/env python3" \
-            --interpreter-constraint ">=3.9,<4"
+            --python-shebang "/usr/bin/env python3"
           chmod +x pia-nm.pex
 
       - name: Upload artifact
