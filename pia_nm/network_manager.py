@@ -192,8 +192,11 @@ def create_profile(
         peer_ip = config["peer_ip"]
         dns_servers = config["dns_servers"]
 
-        # Generate interface name from profile name
-        ifname = f"wg-{profile_name.lower().replace(' ', '-')}"
+        # Generate interface name (max 15 chars for Linux)
+        # Use a hash of profile name to keep it short and unique
+        import hashlib
+        name_hash = hashlib.md5(profile_name.encode()).hexdigest()[:8]
+        ifname = f"wg-{name_hash}"
 
         logger.info("Creating WireGuard profile: %s", profile_name)
 
@@ -234,8 +237,10 @@ def create_profile(
             profile_name,
             "wireguard.listen-port",
             str(listen_port),
-            "+wireguard.peer",
+            "wireguard.peer",
             server_pubkey,
+            "wireguard.peer-routes",
+            "yes",
             "wireguard.peer.endpoint",
             endpoint,
             "wireguard.peer.allowed-ips",
@@ -340,8 +345,10 @@ def update_profile(
             private_key,
             "wireguard.listen-port",
             str(listen_port),
-            "+wireguard.peer",
+            "wireguard.peer",
             server_pubkey,
+            "wireguard.peer-routes",
+            "yes",
             "wireguard.peer.endpoint",
             endpoint,
             "wireguard.peer.allowed-ips",
