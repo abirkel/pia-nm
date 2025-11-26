@@ -262,6 +262,7 @@ PersistentKeepalive = {keepalive}
                     "ipv4.never-default", "no",
                     "ipv4.route-metric", "100",
                     "ipv6.method", "disabled",
+                    "wireguard.ip4-auto-default-route", "yes",
                 ],
                 capture_output=True,
                 text=True,
