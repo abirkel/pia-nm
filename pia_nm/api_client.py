@@ -292,12 +292,15 @@ class PIAClient:
 
         try:
             # GET request to server's /addKey endpoint with query parameters
-            url = f"https://{server_hostname}:1337/addKey"
+            # Use IP address directly but set Host header to hostname for cert validation
+            url = f"https://{server_ip}:1337/addKey"
             params = {"pt": token, "pubkey": pubkey}
+            headers = {"Host": server_hostname}
 
             response = self.session.get(
                 url,
                 params=params,
+                headers=headers,
                 timeout=REQUEST_TIMEOUT,
                 verify=False,  # PIA uses self-signed certs, would need ca.rsa.4096.crt
             )
