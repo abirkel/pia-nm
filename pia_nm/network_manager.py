@@ -230,6 +230,10 @@ def create_profile(
         # Build DNS string
         dns_string = " ".join(dns_servers)
 
+        # Configure peer using the correct nmcli syntax
+        # Format: wireguard.peers = 'public-key=<key>,endpoint=<ip:port>,allowed-ips=<ips>,persistent-keepalive=<seconds>'
+        peer_config = f"public-key={server_pubkey},endpoint={endpoint},allowed-ips=0.0.0.0/0,persistent-keepalive={keepalive}"
+        
         modify_args = [
             "nmcli",
             "connection",
@@ -237,16 +241,8 @@ def create_profile(
             profile_name,
             "wireguard.listen-port",
             str(listen_port),
-            "wireguard.peer",
-            server_pubkey,
-            "wireguard.peer-routes",
-            "yes",
-            "wireguard.peer.endpoint",
-            endpoint,
-            "wireguard.peer.allowed-ips",
-            "0.0.0.0/0",
-            "wireguard.peer.persistent-keepalive",
-            str(keepalive),
+            "wireguard.peers",
+            peer_config,
             "ipv4.method",
             "manual",
             "ipv4.addresses",
@@ -335,6 +331,10 @@ def update_profile(
         # Build DNS string
         dns_string = " ".join(dns_servers)
 
+        # Configure peer using the correct nmcli syntax
+        # Format: wireguard.peers = 'public-key=<key>,endpoint=<ip:port>,allowed-ips=<ips>,persistent-keepalive=<seconds>'
+        peer_config = f"public-key={server_pubkey},endpoint={endpoint},allowed-ips=0.0.0.0/0,persistent-keepalive={keepalive}"
+        
         # Update profile using modify (preserves active connections)
         modify_args = [
             "nmcli",
@@ -345,16 +345,8 @@ def update_profile(
             private_key,
             "wireguard.listen-port",
             str(listen_port),
-            "wireguard.peer",
-            server_pubkey,
-            "wireguard.peer-routes",
-            "yes",
-            "wireguard.peer.endpoint",
-            endpoint,
-            "wireguard.peer.allowed-ips",
-            "0.0.0.0/0",
-            "wireguard.peer.persistent-keepalive",
-            str(keepalive),
+            "wireguard.peers",
+            peer_config,
             "ipv4.method",
             "manual",
             "ipv4.addresses",
