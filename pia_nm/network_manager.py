@@ -261,9 +261,9 @@ PersistentKeepalive = {keepalive}
             # We need to edit the connection file and reload
             conn_file = f"/etc/NetworkManager/system-connections/{profile_name}.nmconnection"
             
-            # Read current content
+            # Read current content (needs sudo)
             result = subprocess.run(
-                ["cat", conn_file],
+                ["sudo", "cat", conn_file],
                 capture_output=True,
                 text=True,
                 check=True,
@@ -278,19 +278,19 @@ PersistentKeepalive = {keepalive}
             peer_section += f"persistent-keepalive={keepalive}\n"
             conn_content += peer_section
             
-            # Write to temp file then copy
+            # Write to temp file then copy (needs sudo)
             with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.nmconnection') as f:
                 f.write(conn_content)
                 temp_conn_file = f.name
             
             try:
                 subprocess.run(
-                    ["cp", temp_conn_file, conn_file],
+                    ["sudo", "cp", temp_conn_file, conn_file],
                     check=True,
                     timeout=10,
                 )
                 subprocess.run(
-                    ["chmod", "600", conn_file],
+                    ["sudo", "chmod", "600", conn_file],
                     check=True,
                     timeout=10,
                 )
