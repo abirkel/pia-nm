@@ -37,10 +37,6 @@ jobs:
             --python-shebang "/usr/bin/env python3"
           chmod +x pia-nm.pex
 
-      - name: Test PEX
-        run: |
-          ./pia-nm.pex --help
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -56,12 +52,19 @@ jobs:
           body: |
             ## Installation
 
-            Download `pia-nm.pex`, make it executable, and move to your PATH:
-
             ```bash
-            chmod +x pia-nm.pex
+            # Download the PEX file
+            curl -L -o pia-nm https://github.com/abirkel/pia-nm/releases/download/${{ github.ref_name }}/pia-nm.pex
+            
+            # Make it executable
+            chmod +x pia-nm
+            
+            # Move to your PATH
             mkdir -p ~/.local/bin
-            mv pia-nm.pex ~/.local/bin/pia-nm
+            mv pia-nm ~/.local/bin/
+            
+            # Verify installation
+            pia-nm --help
             ```
 
             See [INSTALL.md](INSTALL.md) for detailed instructions.
