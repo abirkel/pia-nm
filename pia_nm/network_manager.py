@@ -253,16 +253,16 @@ PersistentKeepalive = {keepalive}
                 )
             
             # Set additional properties
+            # Add explicit default route with low metric to ensure VPN is preferred
             subprocess.run(
                 [
                     "nmcli", "connection", "modify", profile_name,
                     "connection.interface-name", ifname,
                     "connection.autoconnect", "no",
                     "ipv4.dns-priority", "-100",
-                    "ipv4.never-default", "no",
-                    "ipv4.route-metric", "100",
+                    "ipv4.routes", "0.0.0.0/0 0.0.0.0 50",
                     "ipv6.method", "disabled",
-                    "wireguard.ip4-auto-default-route", "yes",
+                    "wireguard.peer-routes", "no",
                 ],
                 capture_output=True,
                 text=True,
