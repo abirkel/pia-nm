@@ -211,6 +211,40 @@ def cmd_setup() -> None:
             print(f"  Setting up {region_id}...", end=" ", flush=True)
             log_operation_start(f"setup region {region_id}")
 
+            # Find region data
+            region_data = None
+            for region in regions:
+                if region.get("id") == region_id:
+                    region_data = region
+                    break
+
+            if not region_data:
+                print("✗")
+                log_operation_failure(
+                    f"setup region {region_id}", Exception(f"Region {region_id} not found")
+                )
+                continue
+
+            # Get WireGuard server info
+            wg_servers = region_data.get("servers", {}).get("wg", [])
+            if not wg_servers:
+                print("✗")
+                log_operation_failure(
+                    f"setup region {region_id}", Exception("No WireGuard servers available")
+                )
+                continue
+
+            server_info = wg_servers[0]
+            server_hostname = server_info.get("cn")
+            server_ip = server_info.get("ip")
+
+            if not server_hostname or not server_ip:
+                print("✗")
+                log_operation_failure(
+                    f"setup region {region_id}", Exception("Invalid server information")
+                )
+                continue
+
             # Load or generate keypair
             try:
                 private_key, public_key = load_keypair(region_id)
@@ -223,7 +257,7 @@ def cmd_setup() -> None:
 
             # Register key with PIA
             log_api_operation("register_key", region_id)
-            conn_details = api.register_key(token, public_key, region_id)
+            conn_details = api.register_key(token, public_key, server_hostname, server_ip)
 
             # Create NetworkManager profile
             profile_name = format_profile_name(region_id)
@@ -414,6 +448,15 @@ def cmd_refresh(region: Optional[str] = None) -> None:
         log_operation_failure("authentication", e)
         sys.exit(1)
 
+    # Get regions data for server info
+    try:
+        log_api_operation("get_regions")
+        regions = api.get_regions()
+    except (NetworkError, APIError) as e:
+        print(f"✗ Failed to fetch regions: {e}")
+        log_operation_failure("fetch regions", e)
+        sys.exit(1)
+
     # Refresh each region
     print("\nRefreshing tokens...")
     successful = 0
@@ -423,6 +466,41 @@ def cmd_refresh(region: Optional[str] = None) -> None:
         try:
             print(f"  {region_id}...", end=" ", flush=True)
             log_operation_start(f"refresh region {region_id}")
+
+            # Find region data
+            region_data = None
+            for region in regions:
+                if region.get("id") == region_id:
+                    region_data = region
+                    break
+
+            if not region_data:
+                print("✗ (region not found)")
+                log_operation_failure(f"refresh region {region_id}", Exception("region not found"))
+                failed += 1
+                continue
+
+            # Get WireGuard server info
+            wg_servers = region_data.get("servers", {}).get("wg", [])
+            if not wg_servers:
+                print("✗ (no WG servers)")
+                log_operation_failure(
+                    f"refresh region {region_id}", Exception("No WireGuard servers available")
+                )
+                failed += 1
+                continue
+
+            server_info = wg_servers[0]
+            server_hostname = server_info.get("cn")
+            server_ip = server_info.get("ip")
+
+            if not server_hostname or not server_ip:
+                print("✗ (invalid server info)")
+                log_operation_failure(
+                    f"refresh region {region_id}", Exception("Invalid server information")
+                )
+                failed += 1
+                continue
 
             # Load keypair
             try:
@@ -443,7 +521,7 @@ def cmd_refresh(region: Optional[str] = None) -> None:
 
             # Register key
             log_api_operation("register_key", region_id)
-            conn_details = api.register_key(token, public_key, region_id)
+            conn_details = api.register_key(token, public_key, server_hostname, server_ip)
 
             # Update profile
             profile_name = format_profile_name(region_id)
