@@ -161,23 +161,46 @@ class PIAClient:
         """
         logger.info("Authenticating with PIA API")
 
-        # Create Basic Auth header
-        credentials = f"{username}:{password}"
-        encoded = base64.b64encode(credentials.encode()).decode("ascii")
-
-        headers = {"Authorization": f"Basic {encoded}"}
+        # Use form data for authentication (POST with form fields)
+        form_data = {"username": username, "password": password}
 
         try:
-            response = self._make_request("GET", "/api/client/v2/token", headers=headers)
+            url = f"{self.base_url}/api/client/v2/token"
+            response = self.session.post(url, data=form_data, timeout=REQUEST_TIMEOUT)
+            response.raise_for_status()
 
-            self._validate_response_structure(response, ["token"])
+            try:
+                data = response.json()
+                if not isinstance(data, dict):
+                    raise APIError("Response is not a JSON object")
+            except ValueError as e:
+                raise APIError(f"Invalid JSON in response: {e}") from e
 
-            token = response.get("token")
+            self._validate_response_structure(data, ["token"])
+
+            token = data.get("token")
             if not isinstance(token, str) or not token:
                 raise AuthenticationError("No token in response")
 
             logger.info("Authentication successful")
             return token
+
+        except requests.exceptions.HTTPError as e:
+            status_code = e.response.status_code
+            logger.error("HTTP %d error from PIA API: %s", status_code, e)
+
+            if status_code == 401:
+                raise AuthenticationError("Invalid credentials or expired token") from e
+            else:
+                raise APIError(f"PIA API error ({status_code}): {e}") from e
+
+        except (Timeout, RequestsConnectionError) as e:
+            logger.error("Network error: %s", e)
+            raise NetworkError(f"Failed to reach PIA API: {e}") from e
+
+        except RequestException as e:
+            logger.error("Request error: %s", e)
+            raise NetworkError(f"Request failed: {e}") from e
 
         except (AuthenticationError, NetworkError):
             raise
@@ -198,11 +221,20 @@ class PIAClient:
         logger.info("Querying available regions from PIA API")
 
         try:
-            response = self._make_request("GET", "/api/client/v2/regions")
+            url = "https://serverlist.piaservers.net/vpninfo/servers/v6"
+            response = self.session.get(url, timeout=REQUEST_TIMEOUT)
+            response.raise_for_status()
 
-            self._validate_response_structure(response, ["regions"])
+            try:
+                data = response.json()
+                if not isinstance(data, dict):
+                    raise APIError("Response is not a JSON object")
+            except ValueError as e:
+                raise APIError(f"Invalid JSON in response: {e}") from e
 
-            regions = response.get("regions", [])
+            self._validate_response_structure(data, ["regions"])
+
+            regions = data.get("regions", [])
 
             if not isinstance(regions, list):
                 raise APIError("'regions' field is not a list")
@@ -210,22 +242,38 @@ class PIAClient:
             logger.info("Retrieved %d regions from PIA API", len(regions))
             return regions
 
+        except requests.exceptions.HTTPError as e:
+            logger.error("HTTP error querying regions: %s", e)
+            raise APIError(f"Failed to query regions: {e}") from e
+
+        except (Timeout, RequestsConnectionError) as e:
+            logger.error("Network error querying regions: %s", e)
+            raise NetworkError(f"Failed to reach region server: {e}") from e
+
+        except RequestException as e:
+            logger.error("Request error: %s", e)
+            raise NetworkError(f"Request failed: {e}") from e
+
         except (NetworkError, APIError):
             raise
         except Exception as e:
             logger.error("Unexpected error querying regions: %s", e)
             raise APIError(f"Failed to query regions: {e}") from e
 
-    def register_key(self, token: str, pubkey: str, region_id: str) -> Dict[str, Any]:
-        """Register WireGuard public key with PIA servers.
+    def register_key(
+        self, token: str, pubkey: str, server_hostname: str, server_ip: str
+    ) -> Dict[str, Any]:
+        """Register WireGuard public key with PIA server.
 
         Args:
             token: Authentication token from authenticate()
             pubkey: WireGuard public key (base64-encoded)
-            region_id: Region identifier (e.g., 'us-east')
+            server_hostname: Server hostname (e.g., 'us-east.wg.piaservers.net')
+            server_ip: Server IP address
 
         Returns:
             Dictionary with connection details:
+                - status: Should be "OK"
                 - server_key: Server's WireGuard public key
                 - server_ip: VPN server IP address
                 - server_port: VPN server port
@@ -237,38 +285,57 @@ class PIAClient:
             NetworkError: If network communication fails
             APIError: If API returns error response
         """
-        logger.info("Registering WireGuard key for region: %s", region_id)
-
-        headers = {
-            "Authorization": f"Token {token}",
-            "Content-Type": "application/json",
-        }
-
-        json_data = {"pubkey": pubkey, "region_id": region_id}
+        logger.info("Registering WireGuard key with server: %s", server_hostname)
 
         try:
-            response = self._make_request(
-                "POST",
-                "/api/client/v2/ephemeral/wireguard/register",
-                headers=headers,
-                json_data=json_data,
+            # GET request to server's /addKey endpoint with query parameters
+            url = f"https://{server_hostname}:1337/addKey"
+            params = {"pt": token, "pubkey": pubkey}
+
+            response = self.session.get(
+                url,
+                params=params,
+                timeout=REQUEST_TIMEOUT,
+                verify=False,  # PIA uses self-signed certs, would need ca.rsa.4096.crt
             )
+            response.raise_for_status()
+
+            try:
+                data = response.json()
+                if not isinstance(data, dict):
+                    raise APIError("Response is not a JSON object")
+            except ValueError as e:
+                raise APIError(f"Invalid JSON in response: {e}") from e
 
             self._validate_response_structure(
-                response,
-                ["status", "server_key", "server_ip", "server_port", "peer_ip", "dns_servers"],
+                data, ["status", "server_key", "server_ip", "server_port", "peer_ip"]
             )
 
-            status = response.get("status")
+            status = data.get("status")
             if status != "OK":
                 raise APIError(f"Key registration failed with status: {status}")
 
-            logger.info("Successfully registered key for region: %s", region_id)
-            return response
+            logger.info("Successfully registered key with server: %s", server_hostname)
+            return data
 
-        except AuthenticationError:
-            raise
-        except (NetworkError, APIError):
+        except requests.exceptions.HTTPError as e:
+            status_code = e.response.status_code
+            logger.error("HTTP %d error registering key: %s", status_code, e)
+
+            if status_code == 401:
+                raise AuthenticationError("Invalid token") from e
+            else:
+                raise APIError(f"Key registration failed ({status_code}): {e}") from e
+
+        except (Timeout, RequestsConnectionError) as e:
+            logger.error("Network error registering key: %s", e)
+            raise NetworkError(f"Failed to reach server: {e}") from e
+
+        except RequestException as e:
+            logger.error("Request error: %s", e)
+            raise NetworkError(f"Request failed: {e}") from e
+
+        except (AuthenticationError, NetworkError, APIError):
             raise
         except Exception as e:
             logger.error("Unexpected error registering key: %s", e)
