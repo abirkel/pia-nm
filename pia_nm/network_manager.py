@@ -221,52 +221,85 @@ PersistentKeepalive = {keepalive}
             temp_config_path = f.name
 
         try:
-            # Import the WireGuard config
-            logger.debug("Importing WireGuard config for: %s", profile_name)
-            result = subprocess.run(
+            # Create WireGuard connection using nmcli (not import, which has parsing issues)
+            logger.debug("Creating WireGuard connection: %s", profile_name)
+            
+            # Step 1: Create base connection
+            subprocess.run(
                 [
-                    "nmcli",
-                    "connection",
-                    "import",
-                    "type",
-                    "wireguard",
-                    "file",
-                    temp_config_path,
+                    "nmcli", "connection", "add",
+                    "type", "wireguard",
+                    "con-name", profile_name,
+                    "ifname", ifname,
+                    "wireguard.private-key", private_key,
                 ],
                 capture_output=True,
                 text=True,
                 check=True,
                 timeout=10,
             )
-
-            # Get the connection name that was created (nmcli uses filename as connection name)
-            imported_name = Path(temp_config_path).stem
             
-            # Rename to our desired name if different
-            if imported_name != profile_name:
-                subprocess.run(
-                    ["nmcli", "connection", "modify", imported_name, "connection.id", profile_name],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                    timeout=10,
-                )
-            
-            # Set additional properties
-            # Add explicit default route with low metric to ensure VPN is preferred
+            # Step 2: Configure interface settings
             subprocess.run(
                 [
                     "nmcli", "connection", "modify", profile_name,
-                    "connection.interface-name", ifname,
-                    "connection.autoconnect", "no",
+                    "ipv4.method", "manual",
+                    "ipv4.addresses", f"{peer_ip}/32",
+                    "ipv4.dns", dns_string,
                     "ipv4.dns-priority", "-100",
-                    "ipv4.routes", "0.0.0.0/0 0.0.0.0 50",
+                    "ipv4.ignore-auto-dns", "yes",
                     "ipv6.method", "disabled",
-                    "wireguard.peer-routes", "no",
-                    "wireguard.ip4-auto-default-route", "no",
+                    "connection.autoconnect", "no",
                 ],
                 capture_output=True,
                 text=True,
+                check=True,
+                timeout=10,
+            )
+            
+            # Step 3: Add peer using connection file edit (nmcli doesn't support adding peers directly)
+            # We need to edit the connection file and reload
+            conn_file = f"/etc/NetworkManager/system-connections/{profile_name}.nmconnection"
+            
+            # Read current content
+            result = subprocess.run(
+                ["cat", conn_file],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=10,
+            )
+            
+            # Add peer section
+            conn_content = result.stdout
+            peer_section = f"\n[wireguard-peer.{server_pubkey}]\n"
+            peer_section += f"endpoint={endpoint}\n"
+            peer_section += f"allowed-ips=0.0.0.0/0;\n"
+            peer_section += f"persistent-keepalive={keepalive}\n"
+            conn_content += peer_section
+            
+            # Write to temp file then copy
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.nmconnection') as f:
+                f.write(conn_content)
+                temp_conn_file = f.name
+            
+            try:
+                subprocess.run(
+                    ["cp", temp_conn_file, conn_file],
+                    check=True,
+                    timeout=10,
+                )
+                subprocess.run(
+                    ["chmod", "600", conn_file],
+                    check=True,
+                    timeout=10,
+                )
+            finally:
+                Path(temp_conn_file).unlink(missing_ok=True)
+            
+            # Reload connection to pick up peer
+            subprocess.run(
+                ["nmcli", "connection", "reload", profile_name],
                 check=True,
                 timeout=10,
             )
