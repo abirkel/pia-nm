@@ -87,11 +87,20 @@ Rather than reimplementing NetworkManager D-Bus integration from scratch, we ada
 
 ### License Compatibility
 
-Both projects use GPLv3:
-- **ProtonVPN**: GNU General Public License v3.0
-- **pia-nm**: GNU General Public License v3.0
+**IMPORTANT LICENSE ISSUE**:
 
-This ensures full license compatibility. All adapted code maintains ProtonVPN's copyright notices and attribution as required by GPLv3.
+- **ProtonVPN**: GNU General Public License v3.0 (GPLv3)
+- **pia-nm**: MIT License
+
+**This is a licensing conflict.** MIT and GPLv3 are NOT compatible. GPLv3 is a copyleft license that requires any derivative work to also be licensed under GPLv3. Since pia-nm adapts code from ProtonVPN's GPLv3-licensed project, pia-nm must also be licensed under GPLv3.
+
+**Required Action**: The pia-nm project license must be changed from MIT to GPLv3 to comply with ProtonVPN's license terms. This affects:
+- LICENSE file (must be changed to GPLv3)
+- All source file headers (must include GPLv3 notice)
+- README.md (must state GPLv3 license)
+- Any documentation referencing the license
+
+**Alternative**: If maintaining MIT license is required, all ProtonVPN-adapted code must be removed and D-Bus integration must be reimplemented from scratch using only NetworkManager documentation and examples.
 
 ### Copyright Notices
 
