@@ -13,11 +13,13 @@ help:
 
 pex:
 	@echo "Building PEX executable..."
+	@echo "Note: PyGObject is excluded - it will use the system version"
 	@pex . \
 		-r <(echo "requests>=2.31.0" && echo "keyring>=24.0.0" && echo "PyYAML>=6.0") \
 		-c pia-nm \
 		-o pia-nm.pex \
-		--python-shebang "/usr/bin/env python3"
+		--python-shebang "/usr/bin/env python3" \
+		--inherit-path
 	@chmod +x pia-nm.pex
 	@echo "✓ Built: pia-nm.pex"
 

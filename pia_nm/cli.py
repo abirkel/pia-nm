@@ -59,13 +59,21 @@ from pia_nm.wireguard import (
     should_rotate_key,
     delete_keypair,
 )
-from pia_nm.dbus_client import NMClient
-from pia_nm.wireguard_connection import create_wireguard_connection, WireGuardConfig
-from pia_nm.token_refresh import (
-    is_connection_active,
-    refresh_active_connection,
-    refresh_inactive_connection,
-)
+
+# D-Bus imports (optional - requires system PyGObject)
+try:
+    from pia_nm.dbus_client import NMClient
+    from pia_nm.wireguard_connection import create_wireguard_connection, WireGuardConfig
+    from pia_nm.token_refresh import (
+        is_connection_active,
+        refresh_active_connection,
+        refresh_inactive_connection,
+    )
+    DBUS_AVAILABLE = True
+except ImportError as e:
+    DBUS_AVAILABLE = False
+    DBUS_ERROR = str(e)
+
 from pia_nm.systemd_manager import (
     install_units,
     uninstall_units,
@@ -120,10 +128,25 @@ def format_profile_name(region_name: str) -> str:
     return f"PIA-{clean_name}"
 
 
+def _check_dbus_available() -> None:
+    """Check if D-Bus support is available, exit with helpful message if not."""
+    if not DBUS_AVAILABLE:
+        print("\n✗ D-Bus support is not available")
+        print("\nThis command requires PyGObject and NetworkManager D-Bus support.")
+        print("\nOn Fedora, install:")
+        print("  sudo dnf install python3-gobject gir1.2-nm-1.0")
+        print("\nOn Debian/Ubuntu, install:")
+        print("  sudo apt install python3-gi gir1.2-nm-1.0")
+        print(f"\nDebug info: {DBUS_ERROR}")
+        sys.exit(1)
+
+
 def cmd_setup() -> None:
     """Interactive setup wizard."""
     import getpass
     import os
+
+    _check_dbus_available()
 
     logger = logging.getLogger(__name__)
     log_operation_start("setup command")
@@ -458,6 +481,8 @@ def cmd_list_regions(port_forwarding: bool = False) -> None:
 
 def cmd_refresh(region: Optional[str] = None) -> None:
     """Refresh authentication tokens."""
+    _check_dbus_available()
+
     logger = logging.getLogger(__name__)
     log_operation_start("refresh command", f"region={region}" if region else "all regions")
 

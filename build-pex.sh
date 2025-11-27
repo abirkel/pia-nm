@@ -25,11 +25,14 @@ rm -f pia-nm.pex
 rm -rf build/ dist/ ./*.egg-info
 
 # Build the PEX file
+# Note: PyGObject is excluded because it's a native extension that must come from the system
+# On Fedora: sudo dnf install python3-gobject gir1.2-nm-1.0
 pex . \
     --requirement <(echo "requests>=2.31.0"; echo "keyring>=24.0.0"; echo "PyYAML>=6.0") \
     --console-script pia-nm \
     --output-file pia-nm.pex \
-    --python-shebang "/usr/bin/env python3"
+    --python-shebang "/usr/bin/env python3" \
+    --inherit-path
 
 # Make it executable
 chmod +x pia-nm.pex
