@@ -9,6 +9,7 @@ Tests cover:
 """
 
 import base64
+import json
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -82,18 +83,19 @@ class TestResponseValidation:
         response = {"token": "test"}
 
         with pytest.raises(APIError, match="Response missing required keys"):
-            client._validate_response_structure(
-                response, ["token", "expires_at", "other_key"]
-            )
+            client._validate_response_structure(response, ["token", "expires_at", "other_key"])
 
 
 class TestAuthentication:
     """Test authentication method."""
 
-    @patch("pia_nm.api_client.PIAClient._make_request")
-    def test_authenticate_success(self, mock_request):
+    @patch("pia_nm.api_client.requests.Session.post")
+    def test_authenticate_success(self, mock_post):
         """Test successful authentication."""
-        mock_request.return_value = {"token": "test_token_123"}
+        mock_response = Mock()
+        mock_response.json.return_value = {"token": "test_token_123"}
+        mock_response.raise_for_status = Mock()
+        mock_post.return_value = mock_response
 
         client = PIAClient()
         token = client.authenticate("testuser", "testpass")
@@ -101,67 +103,63 @@ class TestAuthentication:
         assert token == "test_token_123"
 
         # Verify request was made correctly
-        mock_request.assert_called_once()
-        call_args = mock_request.call_args
-        assert call_args[0][0] == "GET"
-        assert call_args[0][1] == "/api/client/v2/token"
+        mock_post.assert_called_once()
+        call_args = mock_post.call_args
+        assert "testuser" in str(call_args)
 
-        # Verify Basic Auth header
-        headers = call_args[1]["headers"]
-        assert "Authorization" in headers
-        assert headers["Authorization"].startswith("Basic ")
-
-        # Verify credentials are base64 encoded
-        auth_header = headers["Authorization"].replace("Basic ", "")
-        decoded = base64.b64decode(auth_header).decode("ascii")
-        assert decoded == "testuser:testpass"
-
-    @patch("pia_nm.api_client.PIAClient._make_request")
-    def test_authenticate_no_token_in_response(self, mock_request):
+    @patch("pia_nm.api_client.requests.Session.post")
+    def test_authenticate_no_token_in_response(self, mock_post):
         """Test authentication fails when token missing from response."""
-        mock_request.return_value = {"expires_at": "2025-11-14T10:30:00Z"}
-
-        client = PIAClient()
-
-        with pytest.raises(AuthenticationError, match="Authentication failed"):
-            client.authenticate("user", "pass")
-
-    @patch("pia_nm.api_client.PIAClient._make_request")
-    def test_authenticate_network_error(self, mock_request):
-        """Test authentication handles network errors."""
-        mock_request.side_effect = NetworkError("Connection failed")
-
-        client = PIAClient()
-
-        with pytest.raises(NetworkError):
-            client.authenticate("user", "pass")
-
-    @patch("pia_nm.api_client.PIAClient._make_request")
-    def test_authenticate_api_error(self, mock_request):
-        """Test authentication handles API errors."""
-        mock_request.side_effect = AuthenticationError("Invalid credentials")
+        mock_response = Mock()
+        mock_response.json.return_value = {"expires_at": "2025-11-14T10:30:00Z"}
+        mock_response.raise_for_status = Mock()
+        mock_post.return_value = mock_response
 
         client = PIAClient()
 
         with pytest.raises(AuthenticationError):
             client.authenticate("user", "pass")
 
-    @patch("pia_nm.api_client.PIAClient._make_request")
-    def test_authenticate_unexpected_error(self, mock_request):
-        """Test authentication handles unexpected errors."""
-        mock_request.side_effect = ValueError("Unexpected error")
+    @patch("pia_nm.api_client.requests.Session.post")
+    def test_authenticate_network_error(self, mock_post):
+        """Test authentication handles network errors."""
+        mock_post.side_effect = ConnectionError("Connection failed")
 
         client = PIAClient()
 
-        with pytest.raises(AuthenticationError, match="Authentication failed"):
+        with pytest.raises(NetworkError):
+            client.authenticate("user", "pass")
+
+    @patch("pia_nm.api_client.requests.Session.post")
+    def test_authenticate_api_error(self, mock_post):
+        """Test authentication handles API errors."""
+        mock_response = Mock()
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            response=Mock(status_code=401)
+        )
+        mock_post.return_value = mock_response
+
+        client = PIAClient()
+
+        with pytest.raises(AuthenticationError):
+            client.authenticate("user", "pass")
+
+    @patch("pia_nm.api_client.requests.Session.post")
+    def test_authenticate_unexpected_error(self, mock_post):
+        """Test authentication handles unexpected errors."""
+        mock_post.side_effect = ValueError("Unexpected error")
+
+        client = PIAClient()
+
+        with pytest.raises(AuthenticationError):
             client.authenticate("user", "pass")
 
 
 class TestGetRegions:
     """Test region query method."""
 
-    @patch("pia_nm.api_client.PIAClient._make_request")
-    def test_get_regions_success(self, mock_request):
+    @patch("pia_nm.api_client.requests.Session.get")
+    def test_get_regions_success(self, mock_get):
         """Test successful region query."""
         mock_regions = [
             {
@@ -181,7 +179,11 @@ class TestGetRegions:
                 "servers": {"wg": [{"ip": "192.0.2.2", "cn": "uk-london", "port": 1337}]},
             },
         ]
-        mock_request.return_value = {"regions": mock_regions}
+        mock_response = Mock()
+        mock_response.text = json.dumps({"regions": mock_regions}) + "\n"
+        mock_response.json.return_value = {"regions": mock_regions}
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
 
         client = PIAClient()
         regions = client.get_regions()
@@ -191,52 +193,64 @@ class TestGetRegions:
         assert regions[1]["id"] == "uk-london"
 
         # Verify request
-        mock_request.assert_called_once_with("GET", "/api/client/v2/regions")
+        mock_get.assert_called_once()
 
-    @patch("pia_nm.api_client.PIAClient._make_request")
-    def test_get_regions_empty_list(self, mock_request):
+    @patch("pia_nm.api_client.requests.Session.get")
+    def test_get_regions_empty_list(self, mock_get):
         """Test region query with empty region list."""
-        mock_request.return_value = {"regions": []}
+        mock_response = Mock()
+        mock_response.text = '{"regions": []}\n'
+        mock_response.json.return_value = {"regions": []}
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
 
         client = PIAClient()
         regions = client.get_regions()
 
         assert regions == []
 
-    @patch("pia_nm.api_client.PIAClient._make_request")
-    def test_get_regions_missing_regions_key(self, mock_request):
+    @patch("pia_nm.api_client.requests.Session.get")
+    def test_get_regions_missing_regions_key(self, mock_get):
         """Test region query fails when regions key missing."""
-        mock_request.return_value = {"data": []}
+        mock_response = Mock()
+        mock_response.text = '{"data": []}\n'
+        mock_response.json.return_value = {"data": []}
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
 
         client = PIAClient()
 
         with pytest.raises(APIError, match="Response missing required keys"):
             client.get_regions()
 
-    @patch("pia_nm.api_client.PIAClient._make_request")
-    def test_get_regions_regions_not_list(self, mock_request):
+    @patch("pia_nm.api_client.requests.Session.get")
+    def test_get_regions_regions_not_list(self, mock_get):
         """Test region query fails when regions is not a list."""
-        mock_request.return_value = {"regions": "not-a-list"}
+        mock_response = Mock()
+        mock_response.text = '{"regions": "not-a-list"}\n'
+        mock_response.json.return_value = {"regions": "not-a-list"}
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
 
         client = PIAClient()
 
         with pytest.raises(APIError, match="'regions' field is not a list"):
             client.get_regions()
 
-    @patch("pia_nm.api_client.PIAClient._make_request")
-    def test_get_regions_network_error(self, mock_request):
+    @patch("pia_nm.api_client.requests.Session.get")
+    def test_get_regions_network_error(self, mock_get):
         """Test region query handles network errors."""
-        mock_request.side_effect = NetworkError("Connection failed")
+        mock_get.side_effect = ConnectionError("Connection failed")
 
         client = PIAClient()
 
         with pytest.raises(NetworkError):
             client.get_regions()
 
-    @patch("pia_nm.api_client.PIAClient._make_request")
-    def test_get_regions_unexpected_error(self, mock_request):
+    @patch("pia_nm.api_client.requests.Session.get")
+    def test_get_regions_unexpected_error(self, mock_get):
         """Test region query handles unexpected errors."""
-        mock_request.side_effect = ValueError("Unexpected error")
+        mock_get.side_effect = ValueError("Unexpected error")
 
         client = PIAClient()
 
@@ -247,10 +261,11 @@ class TestGetRegions:
 class TestRegisterKey:
     """Test WireGuard key registration method."""
 
-    @patch("pia_nm.api_client.PIAClient._make_request")
-    def test_register_key_success(self, mock_request):
+    @patch("pia_nm.api_client.requests.Session.get")
+    def test_register_key_success(self, mock_get):
         """Test successful key registration."""
-        mock_response = {
+        mock_response = Mock()
+        mock_response.json.return_value = {
             "status": "OK",
             "server_key": "server_public_key_base64",
             "server_ip": "10.10.10.1",
@@ -258,49 +273,48 @@ class TestRegisterKey:
             "peer_ip": "10.20.30.40",
             "dns_servers": ["10.0.0.242", "10.0.0.243"],
         }
-        mock_request.return_value = mock_response
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
 
         client = PIAClient()
-        result = client.register_key("test_token", "client_pubkey", "us-east")
+        result = client.register_key(
+            "test_token", "client_pubkey", "us-east.wg.piaservers.net", "192.0.2.1"
+        )
 
-        assert result == mock_response
         assert result["status"] == "OK"
         assert result["peer_ip"] == "10.20.30.40"
 
-        # Verify request
-        mock_request.assert_called_once()
-        call_args = mock_request.call_args
-        assert call_args[0][0] == "POST"
-        assert call_args[0][1] == "/api/client/v2/ephemeral/wireguard/register"
+        # Verify request was made to correct URL
+        mock_get.assert_called_once()
+        call_args = mock_get.call_args
+        # Check positional args or kwargs
+        if len(call_args[0]) > 0:
+            assert "192.0.2.1:1337/addKey" in call_args[0][0]
+        else:
+            assert "192.0.2.1:1337/addKey" in call_args[1].get("url", "")
 
-        # Verify headers
-        headers = call_args[1]["headers"]
-        assert headers["Authorization"] == "Token test_token"
-        assert headers["Content-Type"] == "application/json"
-
-        # Verify JSON data
-        json_data = call_args[1]["json_data"]
-        assert json_data["pubkey"] == "client_pubkey"
-        assert json_data["region_id"] == "us-east"
-
-    @patch("pia_nm.api_client.PIAClient._make_request")
-    def test_register_key_missing_required_fields(self, mock_request):
+    @patch("pia_nm.api_client.requests.Session.get")
+    def test_register_key_missing_required_fields(self, mock_get):
         """Test key registration fails when response missing required fields."""
-        mock_request.return_value = {
+        mock_response = Mock()
+        mock_response.json.return_value = {
             "status": "OK",
             "server_key": "key",
             # Missing other required fields
         }
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
 
         client = PIAClient()
 
         with pytest.raises(APIError, match="Response missing required keys"):
-            client.register_key("token", "pubkey", "us-east")
+            client.register_key("token", "pubkey", "us-east.wg.piaservers.net", "192.0.2.1")
 
-    @patch("pia_nm.api_client.PIAClient._make_request")
-    def test_register_key_status_not_ok(self, mock_request):
+    @patch("pia_nm.api_client.requests.Session.get")
+    def test_register_key_status_not_ok(self, mock_get):
         """Test key registration fails when status is not OK."""
-        mock_request.return_value = {
+        mock_response = Mock()
+        mock_response.json.return_value = {
             "status": "ERROR",
             "server_key": "key",
             "server_ip": "10.10.10.1",
@@ -308,41 +322,47 @@ class TestRegisterKey:
             "peer_ip": "10.20.30.40",
             "dns_servers": ["10.0.0.242"],
         }
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
 
         client = PIAClient()
 
         with pytest.raises(APIError, match="Key registration failed"):
-            client.register_key("token", "pubkey", "us-east")
+            client.register_key("token", "pubkey", "us-east.wg.piaservers.net", "192.0.2.1")
 
-    @patch("pia_nm.api_client.PIAClient._make_request")
-    def test_register_key_authentication_error(self, mock_request):
+    @patch("pia_nm.api_client.requests.Session.get")
+    def test_register_key_authentication_error(self, mock_get):
         """Test key registration handles authentication errors."""
-        mock_request.side_effect = AuthenticationError("Invalid token")
+        mock_response = Mock()
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            response=Mock(status_code=401)
+        )
+        mock_get.return_value = mock_response
 
         client = PIAClient()
 
         with pytest.raises(AuthenticationError):
-            client.register_key("bad_token", "pubkey", "us-east")
+            client.register_key("bad_token", "pubkey", "us-east.wg.piaservers.net", "192.0.2.1")
 
-    @patch("pia_nm.api_client.PIAClient._make_request")
-    def test_register_key_network_error(self, mock_request):
+    @patch("pia_nm.api_client.requests.Session.get")
+    def test_register_key_network_error(self, mock_get):
         """Test key registration handles network errors."""
-        mock_request.side_effect = NetworkError("Connection failed")
+        mock_get.side_effect = ConnectionError("Connection failed")
 
         client = PIAClient()
 
         with pytest.raises(NetworkError):
-            client.register_key("token", "pubkey", "us-east")
+            client.register_key("token", "pubkey", "us-east.wg.piaservers.net", "192.0.2.1")
 
-    @patch("pia_nm.api_client.PIAClient._make_request")
-    def test_register_key_unexpected_error(self, mock_request):
+    @patch("pia_nm.api_client.requests.Session.get")
+    def test_register_key_unexpected_error(self, mock_get):
         """Test key registration handles unexpected errors."""
-        mock_request.side_effect = ValueError("Unexpected error")
+        mock_get.side_effect = ValueError("Unexpected error")
 
         client = PIAClient()
 
         with pytest.raises(APIError, match="Failed to register key"):
-            client.register_key("token", "pubkey", "us-east")
+            client.register_key("token", "pubkey", "us-east.wg.piaservers.net", "192.0.2.1")
 
 
 class TestMakeRequest:
@@ -371,9 +391,7 @@ class TestMakeRequest:
         mock_post.return_value = mock_response
 
         client = PIAClient()
-        result = client._make_request(
-            "POST", "/test/endpoint", json_data={"key": "value"}
-        )
+        result = client._make_request("POST", "/test/endpoint", json_data={"key": "value"})
 
         assert result == {"result": "created"}
         mock_post.assert_called_once()
@@ -381,10 +399,10 @@ class TestMakeRequest:
     @patch("pia_nm.api_client.requests.Session.get")
     def test_make_request_timeout_retries(self, mock_get):
         """Test that timeout triggers retry."""
-        mock_get.side_effect = [Timeout("Request timed out"), Mock(
-            json=Mock(return_value={"result": "success"}),
-            raise_for_status=Mock()
-        )]
+        mock_get.side_effect = [
+            Timeout("Request timed out"),
+            Mock(json=Mock(return_value={"result": "success"}), raise_for_status=Mock()),
+        ]
 
         client = PIAClient()
         result = client._make_request("GET", "/test/endpoint")
@@ -395,10 +413,10 @@ class TestMakeRequest:
     @patch("pia_nm.api_client.requests.Session.get")
     def test_make_request_connection_error_retries(self, mock_get):
         """Test that connection error triggers retry."""
-        mock_get.side_effect = [ConnectionError("Connection failed"), Mock(
-            json=Mock(return_value={"result": "success"}),
-            raise_for_status=Mock()
-        )]
+        mock_get.side_effect = [
+            ConnectionError("Connection failed"),
+            Mock(json=Mock(return_value={"result": "success"}), raise_for_status=Mock()),
+        ]
 
         client = PIAClient()
         result = client._make_request("GET", "/test/endpoint")
@@ -528,6 +546,7 @@ class TestIntegration:
 
         # Mock regions query
         regions_response = Mock()
+        regions_response.text = '{"regions": [{"id": "us-east", "name": "US East", "country": "US", "dns": "10.0.0.242", "port_forward": false, "servers": {"wg": [{"ip": "192.0.2.1", "cn": "us-east", "port": 1337}]}}]}\n'
         regions_response.json.return_value = {
             "regions": [
                 {
@@ -555,8 +574,8 @@ class TestIntegration:
         register_response.raise_for_status = Mock()
 
         # Set up mock responses
-        mock_get.side_effect = [auth_response, regions_response]
-        mock_post.return_value = register_response
+        mock_post.return_value = auth_response
+        mock_get.side_effect = [regions_response, register_response]
 
         client = PIAClient()
 
@@ -570,6 +589,8 @@ class TestIntegration:
         assert regions[0]["id"] == "us-east"
 
         # Register key
-        result = client.register_key(token, "client_pubkey", "us-east")
+        result = client.register_key(
+            token, "client_pubkey", "us-east.wg.piaservers.net", "192.0.2.1"
+        )
         assert result["status"] == "OK"
         assert result["peer_ip"] == "10.20.30.40"

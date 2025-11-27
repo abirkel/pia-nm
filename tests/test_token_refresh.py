@@ -13,12 +13,13 @@ from unittest.mock import Mock, MagicMock, patch, call
 
 # Mock gi.repository before importing token_refresh
 import sys
-sys.modules['gi'] = MagicMock()
-sys.modules['gi.repository'] = MagicMock()
+
+sys.modules["gi"] = MagicMock()
+sys.modules["gi.repository"] = MagicMock()
 
 # Create mock NM module
 mock_nm = MagicMock()
-sys.modules['gi.repository.NM'] = mock_nm
+sys.modules["gi.repository.NM"] = mock_nm
 
 from pia_nm.token_refresh import (
     is_connection_active,
@@ -63,13 +64,13 @@ class TestGetConnectionSettings:
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
         mock_connection.get_id.return_value = "test-conn"
-        
+
         mock_active_conn = MagicMock()
         mock_nm_client.get_active_connection.return_value = mock_active_conn
-        
+
         mock_device = MagicMock()
         mock_nm_client.get_device_for_connection.return_value = mock_device
-        
+
         mock_settings = {"wireguard": {"private-key": "test_key"}}
         mock_nm_client.get_applied_connection.return_value = (mock_settings, 1)
 
@@ -83,9 +84,9 @@ class TestGetConnectionSettings:
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
         mock_connection.get_id.return_value = "test-conn"
-        
+
         mock_nm_client.get_active_connection.return_value = None
-        
+
         mock_settings = {"wireguard": {"private-key": "test_key"}}
         mock_connection.to_dbus.return_value = mock_settings
 
@@ -99,7 +100,7 @@ class TestGetConnectionSettings:
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
         mock_connection.get_id.return_value = "test-conn"
-        
+
         mock_active_conn = MagicMock()
         mock_nm_client.get_active_connection.return_value = mock_active_conn
         mock_nm_client.get_device_for_connection.return_value = None
@@ -115,10 +116,7 @@ class TestUpdateWireGuardSettings:
     def test_update_wireguard_settings_updates_private_key(self):
         """Test that update_wireguard_settings updates the private key."""
         settings = {
-            "wireguard": {
-                "private-key": "old_key",
-                "peers": [{"endpoint": "old_endpoint:1337"}]
-            }
+            "wireguard": {"private-key": "old_key", "peers": [{"endpoint": "old_endpoint:1337"}]}
         }
 
         result = update_wireguard_settings(settings, "new_key", "new_endpoint:1337")
@@ -130,10 +128,7 @@ class TestUpdateWireGuardSettings:
     def test_update_wireguard_settings_updates_endpoint(self):
         """Test that update_wireguard_settings updates the endpoint."""
         settings = {
-            "wireguard": {
-                "private-key": "test_key",
-                "peers": [{"endpoint": "old_endpoint:1337"}]
-            }
+            "wireguard": {"private-key": "test_key", "peers": [{"endpoint": "old_endpoint:1337"}]}
         }
 
         result = update_wireguard_settings(settings, "new_key", "new_endpoint:1337")
@@ -148,9 +143,9 @@ class TestUpdateWireGuardSettings:
             "wireguard": {
                 "private-key": "old_key",
                 "fwmark": 51820,
-                "peers": [{"endpoint": "old_endpoint:1337", "allowed-ips": "0.0.0.0/0"}]
+                "peers": [{"endpoint": "old_endpoint:1337", "allowed-ips": "0.0.0.0/0"}],
             },
-            "ipv4": {"method": "manual"}
+            "ipv4": {"method": "manual"},
         }
 
         result = update_wireguard_settings(settings, "new_key", "new_endpoint:1337")
@@ -176,10 +171,10 @@ class TestGetAppliedConnectionWithVersion:
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
         mock_connection.get_id.return_value = "test-conn"
-        
+
         mock_device = MagicMock()
         mock_nm_client.get_device_for_connection.return_value = mock_device
-        
+
         mock_settings = {"wireguard": {"private-key": "test_key"}}
         mock_version_id = 5
         mock_nm_client.get_applied_connection.return_value = (mock_settings, mock_version_id)
@@ -195,7 +190,7 @@ class TestGetAppliedConnectionWithVersion:
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
         mock_connection.get_id.return_value = "test-conn"
-        
+
         mock_nm_client.get_device_for_connection.return_value = None
 
         result = get_applied_connection_with_version(mock_nm_client, mock_connection)
@@ -207,7 +202,7 @@ class TestGetAppliedConnectionWithVersion:
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
         mock_connection.get_id.return_value = "test-conn"
-        
+
         mock_device = MagicMock()
         mock_nm_client.get_device_for_connection.return_value = mock_device
         mock_nm_client.get_applied_connection.return_value = None
@@ -220,155 +215,121 @@ class TestGetAppliedConnectionWithVersion:
 class TestRefreshActiveConnection:
     """Test live refresh for active connections."""
 
-    @patch('pia_nm.token_refresh.get_applied_connection_with_version')
-    @patch('pia_nm.token_refresh.update_wireguard_settings')
-    def test_refresh_active_connection_success(
-        self,
-        mock_update_settings,
-        mock_get_applied
-    ):
+    @patch("pia_nm.token_refresh.get_applied_connection_with_version")
+    @patch("pia_nm.token_refresh.update_wireguard_settings")
+    def test_refresh_active_connection_success(self, mock_update_settings, mock_get_applied):
         """Test successful refresh of active connection."""
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
         mock_connection.get_id.return_value = "test-conn"
-        
+
         mock_settings = {"wireguard": {"private-key": "old_key"}}
         mock_version_id = 5
         mock_get_applied.return_value = (mock_settings, mock_version_id)
-        
+
         mock_updated_settings = {"wireguard": {"private-key": "new_key"}}
         mock_update_settings.return_value = mock_updated_settings
-        
+
         mock_device = MagicMock()
         mock_nm_client.get_device_for_connection.return_value = mock_device
         mock_nm_client.reapply_connection.return_value = True
 
         result = refresh_active_connection(
-            mock_nm_client,
-            mock_connection,
-            "new_key",
-            "new_endpoint:1337"
+            mock_nm_client, mock_connection, "new_key", "new_endpoint:1337"
         )
 
         assert result is True
         mock_get_applied.assert_called_once_with(mock_nm_client, mock_connection)
-        mock_update_settings.assert_called_once_with(
-            mock_settings,
-            "new_key",
-            "new_endpoint:1337"
-        )
+        mock_update_settings.assert_called_once_with(mock_settings, "new_key", "new_endpoint:1337")
         mock_nm_client.reapply_connection.assert_called_once_with(
-            mock_device,
-            mock_updated_settings,
-            mock_version_id
+            mock_device, mock_updated_settings, mock_version_id
         )
 
-    @patch('pia_nm.token_refresh.get_applied_connection_with_version')
-    def test_refresh_active_connection_fails_when_get_applied_fails(
-        self,
-        mock_get_applied
-    ):
+    @patch("pia_nm.token_refresh.get_applied_connection_with_version")
+    def test_refresh_active_connection_fails_when_get_applied_fails(self, mock_get_applied):
         """Test that refresh fails when get_applied_connection_with_version fails."""
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
         mock_connection.get_id.return_value = "test-conn"
-        
+
         mock_get_applied.return_value = None
 
         result = refresh_active_connection(
-            mock_nm_client,
-            mock_connection,
-            "new_key",
-            "new_endpoint:1337"
+            mock_nm_client, mock_connection, "new_key", "new_endpoint:1337"
         )
 
         assert result is False
 
-    @patch('pia_nm.token_refresh.get_applied_connection_with_version')
-    @patch('pia_nm.token_refresh.update_wireguard_settings')
+    @patch("pia_nm.token_refresh.get_applied_connection_with_version")
+    @patch("pia_nm.token_refresh.update_wireguard_settings")
     def test_refresh_active_connection_fails_when_update_settings_raises(
-        self,
-        mock_update_settings,
-        mock_get_applied
+        self, mock_update_settings, mock_get_applied
     ):
         """Test that refresh fails when update_wireguard_settings raises ValueError."""
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
         mock_connection.get_id.return_value = "test-conn"
-        
+
         mock_settings = {"wireguard": {"private-key": "old_key"}}
         mock_version_id = 5
         mock_get_applied.return_value = (mock_settings, mock_version_id)
-        
+
         mock_update_settings.side_effect = ValueError("Invalid settings")
 
         result = refresh_active_connection(
-            mock_nm_client,
-            mock_connection,
-            "new_key",
-            "new_endpoint:1337"
+            mock_nm_client, mock_connection, "new_key", "new_endpoint:1337"
         )
 
         assert result is False
 
-    @patch('pia_nm.token_refresh.get_applied_connection_with_version')
-    @patch('pia_nm.token_refresh.update_wireguard_settings')
+    @patch("pia_nm.token_refresh.get_applied_connection_with_version")
+    @patch("pia_nm.token_refresh.update_wireguard_settings")
     def test_refresh_active_connection_fails_when_no_device(
-        self,
-        mock_update_settings,
-        mock_get_applied
+        self, mock_update_settings, mock_get_applied
     ):
         """Test that refresh fails when device not found."""
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
         mock_connection.get_id.return_value = "test-conn"
-        
+
         mock_settings = {"wireguard": {"private-key": "old_key"}}
         mock_version_id = 5
         mock_get_applied.return_value = (mock_settings, mock_version_id)
-        
+
         mock_updated_settings = {"wireguard": {"private-key": "new_key"}}
         mock_update_settings.return_value = mock_updated_settings
-        
+
         mock_nm_client.get_device_for_connection.return_value = None
 
         result = refresh_active_connection(
-            mock_nm_client,
-            mock_connection,
-            "new_key",
-            "new_endpoint:1337"
+            mock_nm_client, mock_connection, "new_key", "new_endpoint:1337"
         )
 
         assert result is False
 
-    @patch('pia_nm.token_refresh.get_applied_connection_with_version')
-    @patch('pia_nm.token_refresh.update_wireguard_settings')
+    @patch("pia_nm.token_refresh.get_applied_connection_with_version")
+    @patch("pia_nm.token_refresh.update_wireguard_settings")
     def test_refresh_active_connection_fails_when_reapply_fails(
-        self,
-        mock_update_settings,
-        mock_get_applied
+        self, mock_update_settings, mock_get_applied
     ):
         """Test that refresh fails when reapply_connection fails."""
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
         mock_connection.get_id.return_value = "test-conn"
-        
+
         mock_settings = {"wireguard": {"private-key": "old_key"}}
         mock_version_id = 5
         mock_get_applied.return_value = (mock_settings, mock_version_id)
-        
+
         mock_updated_settings = {"wireguard": {"private-key": "new_key"}}
         mock_update_settings.return_value = mock_updated_settings
-        
+
         mock_device = MagicMock()
         mock_nm_client.get_device_for_connection.return_value = mock_device
         mock_nm_client.reapply_connection.return_value = False
 
         result = refresh_active_connection(
-            mock_nm_client,
-            mock_connection,
-            "new_key",
-            "new_endpoint:1337"
+            mock_nm_client, mock_connection, "new_key", "new_endpoint:1337"
         )
 
         assert result is False
@@ -377,103 +338,80 @@ class TestRefreshActiveConnection:
 class TestRefreshInactiveConnection:
     """Test saved profile update for inactive connections."""
 
-    @patch('pia_nm.token_refresh.update_wireguard_settings')
+    @patch("pia_nm.token_refresh.update_wireguard_settings")
     def test_refresh_inactive_connection_success(self, mock_update_settings):
         """Test successful refresh of inactive connection."""
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
         mock_connection.get_id.return_value = "test-conn"
-        
+
         mock_settings = {"wireguard": {"private-key": "old_key"}}
         mock_connection.to_dbus.return_value = mock_settings
-        
+
         mock_updated_settings = {"wireguard": {"private-key": "new_key"}}
         mock_update_settings.return_value = mock_updated_settings
 
         result = refresh_inactive_connection(
-            mock_nm_client,
-            mock_connection,
-            "new_key",
-            "new_endpoint:1337"
+            mock_nm_client, mock_connection, "new_key", "new_endpoint:1337"
         )
 
         assert result is True
         mock_connection.to_dbus.assert_called_once()
-        mock_update_settings.assert_called_once_with(
-            mock_settings,
-            "new_key",
-            "new_endpoint:1337"
-        )
+        mock_update_settings.assert_called_once_with(mock_settings, "new_key", "new_endpoint:1337")
         mock_connection.update2.assert_called_once()
 
-    @patch('pia_nm.token_refresh.update_wireguard_settings')
-    def test_refresh_inactive_connection_fails_when_to_dbus_fails(
-        self,
-        mock_update_settings
-    ):
+    @patch("pia_nm.token_refresh.update_wireguard_settings")
+    def test_refresh_inactive_connection_fails_when_to_dbus_fails(self, mock_update_settings):
         """Test that refresh fails when to_dbus fails."""
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
         mock_connection.get_id.return_value = "test-conn"
-        
+
         mock_connection.to_dbus.side_effect = RuntimeError("Failed to get settings")
 
         result = refresh_inactive_connection(
-            mock_nm_client,
-            mock_connection,
-            "new_key",
-            "new_endpoint:1337"
+            mock_nm_client, mock_connection, "new_key", "new_endpoint:1337"
         )
 
         assert result is False
 
-    @patch('pia_nm.token_refresh.update_wireguard_settings')
+    @patch("pia_nm.token_refresh.update_wireguard_settings")
     def test_refresh_inactive_connection_fails_when_update_settings_raises(
-        self,
-        mock_update_settings
+        self, mock_update_settings
     ):
         """Test that refresh fails when update_wireguard_settings raises ValueError."""
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
         mock_connection.get_id.return_value = "test-conn"
-        
+
         mock_settings = {"wireguard": {"private-key": "old_key"}}
         mock_connection.to_dbus.return_value = mock_settings
-        
+
         mock_update_settings.side_effect = ValueError("Invalid settings")
 
         result = refresh_inactive_connection(
-            mock_nm_client,
-            mock_connection,
-            "new_key",
-            "new_endpoint:1337"
+            mock_nm_client, mock_connection, "new_key", "new_endpoint:1337"
         )
 
         assert result is False
 
-    @patch('pia_nm.token_refresh.update_wireguard_settings')
-    def test_refresh_inactive_connection_fails_when_update2_fails(
-        self,
-        mock_update_settings
-    ):
+    @patch("pia_nm.token_refresh.update_wireguard_settings")
+    def test_refresh_inactive_connection_fails_when_update2_fails(self, mock_update_settings):
         """Test that refresh fails when update2 fails."""
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
         mock_connection.get_id.return_value = "test-conn"
-        
+
         mock_settings = {"wireguard": {"private-key": "old_key"}}
         mock_connection.to_dbus.return_value = mock_settings
-        
+
         mock_updated_settings = {"wireguard": {"private-key": "new_key"}}
         mock_update_settings.return_value = mock_updated_settings
-        
+
         mock_connection.update2.side_effect = RuntimeError("Failed to update")
 
         result = refresh_inactive_connection(
-            mock_nm_client,
-            mock_connection,
-            "new_key",
-            "new_endpoint:1337"
+            mock_nm_client, mock_connection, "new_key", "new_endpoint:1337"
         )
 
         assert result is False
@@ -482,59 +420,47 @@ class TestRefreshInactiveConnection:
 class TestNoDeleteRecreate:
     """Test that refresh operations don't delete and recreate connections."""
 
-    @patch('pia_nm.token_refresh.get_applied_connection_with_version')
-    @patch('pia_nm.token_refresh.update_wireguard_settings')
+    @patch("pia_nm.token_refresh.get_applied_connection_with_version")
+    @patch("pia_nm.token_refresh.update_wireguard_settings")
     def test_refresh_active_connection_does_not_delete(
-        self,
-        mock_update_settings,
-        mock_get_applied
+        self, mock_update_settings, mock_get_applied
     ):
         """Test that refresh_active_connection doesn't call delete methods."""
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
         mock_connection.get_id.return_value = "test-conn"
-        
+
         mock_settings = {"wireguard": {"private-key": "old_key"}}
         mock_version_id = 5
         mock_get_applied.return_value = (mock_settings, mock_version_id)
-        
+
         mock_updated_settings = {"wireguard": {"private-key": "new_key"}}
         mock_update_settings.return_value = mock_updated_settings
-        
+
         mock_device = MagicMock()
         mock_nm_client.get_device_for_connection.return_value = mock_device
         mock_nm_client.reapply_connection.return_value = True
 
-        refresh_active_connection(
-            mock_nm_client,
-            mock_connection,
-            "new_key",
-            "new_endpoint:1337"
-        )
+        refresh_active_connection(mock_nm_client, mock_connection, "new_key", "new_endpoint:1337")
 
         # Verify delete methods were NOT called
         mock_connection.delete_async.assert_not_called()
         mock_nm_client.remove_connection_async.assert_not_called()
 
-    @patch('pia_nm.token_refresh.update_wireguard_settings')
+    @patch("pia_nm.token_refresh.update_wireguard_settings")
     def test_refresh_inactive_connection_does_not_delete(self, mock_update_settings):
         """Test that refresh_inactive_connection doesn't call delete methods."""
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
         mock_connection.get_id.return_value = "test-conn"
-        
+
         mock_settings = {"wireguard": {"private-key": "old_key"}}
         mock_connection.to_dbus.return_value = mock_settings
-        
+
         mock_updated_settings = {"wireguard": {"private-key": "new_key"}}
         mock_update_settings.return_value = mock_updated_settings
 
-        refresh_inactive_connection(
-            mock_nm_client,
-            mock_connection,
-            "new_key",
-            "new_endpoint:1337"
-        )
+        refresh_inactive_connection(mock_nm_client, mock_connection, "new_key", "new_endpoint:1337")
 
         # Verify delete methods were NOT called
         mock_connection.delete_async.assert_not_called()

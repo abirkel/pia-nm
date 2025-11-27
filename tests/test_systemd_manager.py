@@ -441,9 +441,10 @@ class TestUninstallUnits:
         mock_home.return_value = Path("/home/testuser")
         mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
 
-        with patch("pathlib.Path.exists", return_value=True), patch(
-            "pathlib.Path.unlink"
-        ) as mock_unlink:
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("pathlib.Path.unlink") as mock_unlink,
+        ):
             uninstall_units()
 
         # Should unlink both service and timer files

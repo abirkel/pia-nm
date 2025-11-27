@@ -11,6 +11,7 @@ import pytest
 from unittest.mock import Mock, MagicMock, patch
 
 import gi
+
 gi.require_version("NM", "1.0")
 from gi.repository import NM
 
@@ -128,24 +129,15 @@ class TestUpdateWireGuardSettings:
         original_settings = {
             "wireguard": {
                 "private-key": "old_key",
-                "peers": [
-                    {
-                        "endpoint": "192.0.2.1:1337",
-                        "public-key": "server_key"
-                    }
-                ]
+                "peers": [{"endpoint": "192.0.2.1:1337", "public-key": "server_key"}],
             },
-            "ipv4": {"method": "manual"}
+            "ipv4": {"method": "manual"},
         }
 
         new_key = "new_private_key"
         new_endpoint = "192.0.2.2:1337"
 
-        result = update_wireguard_settings(
-            original_settings,
-            new_key,
-            new_endpoint
-        )
+        result = update_wireguard_settings(original_settings, new_key, new_endpoint)
 
         # Verify original settings not modified
         assert original_settings["wireguard"]["private-key"] == "old_key"
@@ -164,18 +156,10 @@ class TestUpdateWireGuardSettings:
 
     def test_update_wireguard_settings_no_peers(self):
         """Test updating settings with no peers configured."""
-        settings = {
-            "wireguard": {
-                "private-key": "old_key"
-            }
-        }
+        settings = {"wireguard": {"private-key": "old_key"}}
 
         # Should not raise, but log warning
-        result = update_wireguard_settings(
-            settings,
-            "new_key",
-            "192.0.2.1:1337"
-        )
+        result = update_wireguard_settings(settings, "new_key", "192.0.2.1:1337")
 
         assert result["wireguard"]["private-key"] == "new_key"
 
@@ -196,9 +180,7 @@ class TestGetAppliedConnectionWithVersion:
         # Mock applied connection
         test_settings = {"wireguard": {"private-key": "test_key"}}
         test_version = 42
-        mock_nm_client.get_applied_connection = Mock(
-            return_value=(test_settings, test_version)
-        )
+        mock_nm_client.get_applied_connection = Mock(return_value=(test_settings, test_version))
 
         result = get_applied_connection_with_version(mock_nm_client, mock_connection)
 
@@ -252,24 +234,16 @@ class TestRefreshActiveConnection:
 
         # Mock applied connection
         test_settings = {
-            "wireguard": {
-                "private-key": "old_key",
-                "peers": [{"endpoint": "192.0.2.1:1337"}]
-            }
+            "wireguard": {"private-key": "old_key", "peers": [{"endpoint": "192.0.2.1:1337"}]}
         }
         test_version = 42
-        mock_nm_client.get_applied_connection = Mock(
-            return_value=(test_settings, test_version)
-        )
+        mock_nm_client.get_applied_connection = Mock(return_value=(test_settings, test_version))
 
         # Mock reapply success
         mock_nm_client.reapply_connection = Mock(return_value=True)
 
         result = refresh_active_connection(
-            mock_nm_client,
-            mock_connection,
-            "new_key",
-            "192.0.2.2:1337"
+            mock_nm_client, mock_connection, "new_key", "192.0.2.2:1337"
         )
 
         assert result is True
@@ -285,10 +259,7 @@ class TestRefreshActiveConnection:
         mock_nm_client.get_applied_connection = Mock(return_value=None)
 
         result = refresh_active_connection(
-            mock_nm_client,
-            mock_connection,
-            "new_key",
-            "192.0.2.2:1337"
+            mock_nm_client, mock_connection, "new_key", "192.0.2.2:1337"
         )
 
         assert result is False
@@ -301,24 +272,16 @@ class TestRefreshActiveConnection:
 
         # Mock applied connection
         test_settings = {
-            "wireguard": {
-                "private-key": "old_key",
-                "peers": [{"endpoint": "192.0.2.1:1337"}]
-            }
+            "wireguard": {"private-key": "old_key", "peers": [{"endpoint": "192.0.2.1:1337"}]}
         }
         test_version = 42
-        mock_nm_client.get_applied_connection = Mock(
-            return_value=(test_settings, test_version)
-        )
+        mock_nm_client.get_applied_connection = Mock(return_value=(test_settings, test_version))
 
         # Mock no device
         mock_nm_client.get_device_for_connection = Mock(return_value=None)
 
         result = refresh_active_connection(
-            mock_nm_client,
-            mock_connection,
-            "new_key",
-            "192.0.2.2:1337"
+            mock_nm_client, mock_connection, "new_key", "192.0.2.2:1337"
         )
 
         assert result is False
@@ -335,24 +298,16 @@ class TestRefreshActiveConnection:
 
         # Mock applied connection
         test_settings = {
-            "wireguard": {
-                "private-key": "old_key",
-                "peers": [{"endpoint": "192.0.2.1:1337"}]
-            }
+            "wireguard": {"private-key": "old_key", "peers": [{"endpoint": "192.0.2.1:1337"}]}
         }
         test_version = 42
-        mock_nm_client.get_applied_connection = Mock(
-            return_value=(test_settings, test_version)
-        )
+        mock_nm_client.get_applied_connection = Mock(return_value=(test_settings, test_version))
 
         # Mock reapply failure
         mock_nm_client.reapply_connection = Mock(return_value=False)
 
         result = refresh_active_connection(
-            mock_nm_client,
-            mock_connection,
-            "new_key",
-            "192.0.2.2:1337"
+            mock_nm_client, mock_connection, "new_key", "192.0.2.2:1337"
         )
 
         assert result is False
@@ -369,10 +324,7 @@ class TestRefreshInactiveConnection:
 
         # Mock saved settings
         test_settings = {
-            "wireguard": {
-                "private-key": "old_key",
-                "peers": [{"endpoint": "192.0.2.1:1337"}]
-            }
+            "wireguard": {"private-key": "old_key", "peers": [{"endpoint": "192.0.2.1:1337"}]}
         }
         mock_connection.to_dbus = Mock(return_value=test_settings)
 
@@ -380,10 +332,7 @@ class TestRefreshInactiveConnection:
         mock_connection.update2 = Mock()
 
         result = refresh_inactive_connection(
-            mock_nm_client,
-            mock_connection,
-            "new_key",
-            "192.0.2.2:1337"
+            mock_nm_client, mock_connection, "new_key", "192.0.2.2:1337"
         )
 
         assert result is True
@@ -399,10 +348,7 @@ class TestRefreshInactiveConnection:
         mock_connection.to_dbus = Mock(side_effect=Exception("Test error"))
 
         result = refresh_inactive_connection(
-            mock_nm_client,
-            mock_connection,
-            "new_key",
-            "192.0.2.2:1337"
+            mock_nm_client, mock_connection, "new_key", "192.0.2.2:1337"
         )
 
         assert result is False
@@ -415,10 +361,7 @@ class TestRefreshInactiveConnection:
 
         # Mock saved settings
         test_settings = {
-            "wireguard": {
-                "private-key": "old_key",
-                "peers": [{"endpoint": "192.0.2.1:1337"}]
-            }
+            "wireguard": {"private-key": "old_key", "peers": [{"endpoint": "192.0.2.1:1337"}]}
         }
         mock_connection.to_dbus = Mock(return_value=test_settings)
 
@@ -426,10 +369,7 @@ class TestRefreshInactiveConnection:
         mock_connection.update2 = Mock(side_effect=Exception("Update failed"))
 
         result = refresh_inactive_connection(
-            mock_nm_client,
-            mock_connection,
-            "new_key",
-            "192.0.2.2:1337"
+            mock_nm_client, mock_connection, "new_key", "192.0.2.2:1337"
         )
 
         assert result is False
@@ -437,11 +377,12 @@ class TestRefreshInactiveConnection:
 
 # Property-Based Tests
 
+
 def test_property_11_live_refresh_for_active_connections():
     """
     **Feature: dbus-refactor, Property 11: Live Refresh for Active Connections**
     **Validates: Requirements 3.1, 3.3, 10.1, 10.3**
-    
+
     Property: For any active connection being refreshed, the system should use
     GetAppliedConnection followed by Reapply with the returned version_id, and
     should NOT call delete or recreate operations.
@@ -456,26 +397,16 @@ def test_property_11_live_refresh_for_active_connections():
 
     # Mock applied connection
     test_settings = {
-        "wireguard": {
-            "private-key": "old_key",
-            "peers": [{"endpoint": "192.0.2.1:1337"}]
-        }
+        "wireguard": {"private-key": "old_key", "peers": [{"endpoint": "192.0.2.1:1337"}]}
     }
     test_version = 42
-    mock_nm_client.get_applied_connection = Mock(
-        return_value=(test_settings, test_version)
-    )
+    mock_nm_client.get_applied_connection = Mock(return_value=(test_settings, test_version))
 
     # Mock reapply success
     mock_nm_client.reapply_connection = Mock(return_value=True)
 
     # Perform refresh
-    result = refresh_active_connection(
-        mock_nm_client,
-        mock_connection,
-        "new_key",
-        "192.0.2.2:1337"
-    )
+    result = refresh_active_connection(mock_nm_client, mock_connection, "new_key", "192.0.2.2:1337")
 
     # Verify success
     assert result is True
@@ -490,17 +421,21 @@ def test_property_11_live_refresh_for_active_connections():
 
     # Verify no delete or recreate operations
     # (These would be calls to remove_connection_async or add_connection_async)
-    assert not hasattr(mock_nm_client, "remove_connection_async") or \
-           not mock_nm_client.remove_connection_async.called
-    assert not hasattr(mock_nm_client, "add_connection_async") or \
-           not mock_nm_client.add_connection_async.called
+    assert (
+        not hasattr(mock_nm_client, "remove_connection_async")
+        or not mock_nm_client.remove_connection_async.called
+    )
+    assert (
+        not hasattr(mock_nm_client, "add_connection_async")
+        or not mock_nm_client.add_connection_async.called
+    )
 
 
 def test_property_12_selective_settings_update():
     """
     **Feature: dbus-refactor, Property 12: Selective Settings Update**
     **Validates: Requirements 3.2**
-    
+
     Property: For any connection refresh, only the wireguard.private-key and
     wireguard.peers[0].endpoint fields should be modified in the settings dict.
     """
@@ -512,29 +447,22 @@ def test_property_12_selective_settings_update():
                 {
                     "endpoint": "192.0.2.1:1337",
                     "public-key": "server_key",
-                    "allowed-ips": ["0.0.0.0/0"]
+                    "allowed-ips": ["0.0.0.0/0"],
                 }
-            ]
+            ],
         },
         "ipv4": {
             "method": "manual",
             "addresses": [{"address": "10.20.30.40", "prefix": 32}],
-            "dns": ["10.0.0.242"]
+            "dns": ["10.0.0.242"],
         },
-        "connection": {
-            "id": "PIA-US-East",
-            "type": "wireguard"
-        }
+        "connection": {"id": "PIA-US-East", "type": "wireguard"},
     }
 
     new_key = "new_private_key"
     new_endpoint = "192.0.2.2:1337"
 
-    updated_settings = update_wireguard_settings(
-        original_settings,
-        new_key,
-        new_endpoint
-    )
+    updated_settings = update_wireguard_settings(original_settings, new_key, new_endpoint)
 
     # Verify only WireGuard private key changed
     assert updated_settings["wireguard"]["private-key"] == new_key
@@ -546,10 +474,14 @@ def test_property_12_selective_settings_update():
 
     # Verify other WireGuard settings unchanged
     assert updated_settings["wireguard"]["fwmark"] == original_settings["wireguard"]["fwmark"]
-    assert updated_settings["wireguard"]["peers"][0]["public-key"] == \
-           original_settings["wireguard"]["peers"][0]["public-key"]
-    assert updated_settings["wireguard"]["peers"][0]["allowed-ips"] == \
-           original_settings["wireguard"]["peers"][0]["allowed-ips"]
+    assert (
+        updated_settings["wireguard"]["peers"][0]["public-key"]
+        == original_settings["wireguard"]["peers"][0]["public-key"]
+    )
+    assert (
+        updated_settings["wireguard"]["peers"][0]["allowed-ips"]
+        == original_settings["wireguard"]["peers"][0]["allowed-ips"]
+    )
 
     # Verify IPv4 settings unchanged
     assert updated_settings["ipv4"] == original_settings["ipv4"]
@@ -562,7 +494,7 @@ def test_property_13_saved_profile_update_for_inactive_connections():
     """
     **Feature: dbus-refactor, Property 13: Saved Profile Update for Inactive Connections**
     **Validates: Requirements 3.5, 10.2**
-    
+
     Property: For any inactive connection being refreshed, the system should
     update the saved connection profile (not use Reapply).
     """
@@ -572,10 +504,7 @@ def test_property_13_saved_profile_update_for_inactive_connections():
 
     # Mock saved settings
     test_settings = {
-        "wireguard": {
-            "private-key": "old_key",
-            "peers": [{"endpoint": "192.0.2.1:1337"}]
-        }
+        "wireguard": {"private-key": "old_key", "peers": [{"endpoint": "192.0.2.1:1337"}]}
     }
     mock_connection.to_dbus = Mock(return_value=test_settings)
 
@@ -584,10 +513,7 @@ def test_property_13_saved_profile_update_for_inactive_connections():
 
     # Perform refresh
     result = refresh_inactive_connection(
-        mock_nm_client,
-        mock_connection,
-        "new_key",
-        "192.0.2.2:1337"
+        mock_nm_client, mock_connection, "new_key", "192.0.2.2:1337"
     )
 
     # Verify success
@@ -600,8 +526,10 @@ def test_property_13_saved_profile_update_for_inactive_connections():
     mock_connection.update2.assert_called_once()
 
     # Verify reapply was NOT called
-    assert not hasattr(mock_nm_client, "reapply_connection") or \
-           not mock_nm_client.reapply_connection.called
+    assert (
+        not hasattr(mock_nm_client, "reapply_connection")
+        or not mock_nm_client.reapply_connection.called
+    )
 
 
 if __name__ == "__main__":

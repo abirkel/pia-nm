@@ -33,7 +33,7 @@ from typing import Optional
 
 class SensitiveDataFilter(logging.Filter):
     """Filter to redact sensitive data from log records.
-    
+
     This filter provides defense-in-depth by redacting common patterns
     of sensitive data that might accidentally be logged:
     - Base64-encoded credentials
@@ -46,23 +46,23 @@ class SensitiveDataFilter(logging.Filter):
     # Patterns to redact
     PATTERNS = [
         # Base64-like strings (potential keys/tokens)
-        (r'[A-Za-z0-9+/]{40,}={0,2}', '[REDACTED_BASE64]'),
+        (r"[A-Za-z0-9+/]{40,}={0,2}", "[REDACTED_BASE64]"),
         # Common token patterns
-        (r'token["\']?\s*[:=]\s*["\']?[A-Za-z0-9_-]+["\']?', 'token=[REDACTED]'),
+        (r'token["\']?\s*[:=]\s*["\']?[A-Za-z0-9_-]+["\']?', "token=[REDACTED]"),
         # Common password patterns
-        (r'password["\']?\s*[:=]\s*["\']?[^"\'\s]+["\']?', 'password=[REDACTED]'),
+        (r'password["\']?\s*[:=]\s*["\']?[^"\'\s]+["\']?', "password=[REDACTED]"),
         # Common key patterns
-        (r'key["\']?\s*[:=]\s*["\']?[A-Za-z0-9_-]+["\']?', 'key=[REDACTED]'),
+        (r'key["\']?\s*[:=]\s*["\']?[A-Za-z0-9_-]+["\']?', "key=[REDACTED]"),
         # Common credential patterns
-        (r'credential["\']?\s*[:=]\s*["\']?[^"\'\s]+["\']?', 'credential=[REDACTED]'),
+        (r'credential["\']?\s*[:=]\s*["\']?[^"\'\s]+["\']?', "credential=[REDACTED]"),
     ]
 
     def filter(self, record: logging.LogRecord) -> bool:
         """Filter log record to redact sensitive data.
-        
+
         Args:
             record: Log record to filter
-            
+
         Returns:
             True to allow the record to be logged
         """

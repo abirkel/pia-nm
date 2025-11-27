@@ -441,49 +441,43 @@ def filter_sensitive_data(text: str) -> str:
 
     # Pattern for WireGuard private keys (base64, typically 44 chars ending in =)
     # Match base64 strings that look like keys
-    text = re.sub(
-        r'\b[A-Za-z0-9+/]{40,}={0,2}\b',
-        '[REDACTED_KEY]',
-        text
-    )
+    text = re.sub(r"\b[A-Za-z0-9+/]{40,}={0,2}\b", "[REDACTED_KEY]", text)
 
     # Pattern for JWT tokens (three base64 segments separated by dots)
     text = re.sub(
-        r'\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b',
-        '[REDACTED_TOKEN]',
-        text
+        r"\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b", "[REDACTED_TOKEN]", text
     )
 
     # Pattern for password fields in various formats
     text = re.sub(
         r'(password["\']?\s*[:=]\s*["\']?)([^"\'\s,}]+)',
-        r'\1[REDACTED_PASSWORD]',
+        r"\1[REDACTED_PASSWORD]",
         text,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     # Pattern for private-key fields
     text = re.sub(
         r'(private[-_]?key["\']?\s*[:=]\s*["\']?)([^"\'\s,}]+)',
-        r'\1[REDACTED_KEY]',
+        r"\1[REDACTED_KEY]",
         text,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     # Pattern for token fields
     text = re.sub(
         r'(token["\']?\s*[:=]\s*["\']?)([^"\'\s,}]+)',
-        r'\1[REDACTED_TOKEN]',
+        r"\1[REDACTED_TOKEN]",
         text,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     # Pattern for Authorization headers
     text = re.sub(
         r'(Authorization["\']?\s*[:=]\s*["\']?(?:Basic|Bearer|Token)\s+)([^\s"\']+)',
-        r'\1[REDACTED]',
+        r"\1[REDACTED]",
         text,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     return text

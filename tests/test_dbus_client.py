@@ -17,14 +17,15 @@ import time
 
 # Mock gi.repository before importing dbus_client
 import sys
-sys.modules['gi'] = MagicMock()
-sys.modules['gi.repository'] = MagicMock()
+
+sys.modules["gi"] = MagicMock()
+sys.modules["gi.repository"] = MagicMock()
 
 # Create mock NM and GLib modules
 mock_nm = MagicMock()
 mock_glib = MagicMock()
-sys.modules['gi.repository.NM'] = mock_nm
-sys.modules['gi.repository.GLib'] = mock_glib
+sys.modules["gi.repository.NM"] = mock_nm
+sys.modules["gi.repository.GLib"] = mock_glib
 
 from pia_nm.dbus_client import NMClient
 
@@ -39,9 +40,9 @@ class TestNMClientInitialization:
         NMClient._main_loop = None
         NMClient._main_loop_thread = None
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
     def test_initialize_creates_singleton(self, mock_thread, mock_context, mock_nm_client):
         """Test that initialize creates singleton NM client."""
         mock_context_instance = MagicMock()
@@ -61,9 +62,9 @@ class TestNMClientInitialization:
         # Verify thread was started
         mock_thread_instance.start.assert_called_once()
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
     def test_initialize_only_once(self, mock_thread, mock_context, mock_nm_client):
         """Test that initialize only creates singleton once."""
         mock_context_instance = MagicMock()
@@ -76,19 +77,19 @@ class TestNMClientInitialization:
         # Call initialize multiple times
         NMClient.initialize()
         first_client = NMClient._nm_client
-        
+
         NMClient.initialize()
         second_client = NMClient._nm_client
 
         # Should be the same instance
         assert first_client is second_client
-        
+
         # Thread should only be started once
         assert mock_thread_instance.start.call_count == 1
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
     def test_init_calls_initialize(self, mock_thread, mock_context, mock_nm_client):
         """Test that __init__ calls initialize."""
         mock_context_instance = MagicMock()
@@ -114,9 +115,9 @@ class TestThreadSafety:
         NMClient._main_loop = None
         NMClient._main_loop_thread = None
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
     def test_run_on_main_loop_uses_invoke_full(self, mock_thread, mock_context, mock_nm_client):
         """Test that _run_on_main_loop uses GLib.MainContext.invoke_full."""
         mock_context_instance = MagicMock()
@@ -137,11 +138,11 @@ class TestThreadSafety:
         # Verify invoke_full was called
         mock_context_instance.invoke_full.assert_called_once()
         call_args = mock_context_instance.invoke_full.call_args
-        assert call_args[1]['function'] == test_func
+        assert call_args[1]["function"] == test_func
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
     def test_assert_running_on_main_loop_thread_raises_when_not_owner(
         self, mock_thread, mock_context, mock_nm_client
     ):
@@ -159,9 +160,9 @@ class TestThreadSafety:
         with pytest.raises(AssertionError, match="must be called from the GLib MainLoop thread"):
             NMClient._assert_running_on_main_loop_thread()
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
     def test_assert_running_on_main_loop_thread_passes_when_owner(
         self, mock_thread, mock_context, mock_nm_client
     ):
@@ -190,9 +191,9 @@ class TestCallbackToFutureBridge:
         NMClient._main_loop = None
         NMClient._main_loop_thread = None
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
     def test_create_callback_returns_callback_and_future(
         self, mock_thread, mock_context, mock_nm_client
     ):
@@ -212,9 +213,9 @@ class TestCallbackToFutureBridge:
         assert callable(callback)
         assert isinstance(future, Future)
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
     def test_callback_sets_future_result_on_success(
         self, mock_thread, mock_context, mock_nm_client
     ):
@@ -243,9 +244,9 @@ class TestCallbackToFutureBridge:
         assert future.done()
         assert future.result() == mock_result
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
     def test_callback_sets_future_exception_on_error(
         self, mock_thread, mock_context, mock_nm_client
     ):
@@ -275,12 +276,10 @@ class TestCallbackToFutureBridge:
         with pytest.raises(RuntimeError, match="Test error"):
             future.result()
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
-    def test_callback_handles_none_source_object(
-        self, mock_thread, mock_context, mock_nm_client
-    ):
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
+    def test_callback_handles_none_source_object(self, mock_thread, mock_context, mock_nm_client):
         """Test that callback handles None source_object gracefully."""
         mock_context_instance = MagicMock()
         mock_context_instance.is_owner.return_value = True
@@ -313,12 +312,10 @@ class TestConnectionManagement:
         NMClient._main_loop = None
         NMClient._main_loop_thread = None
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
-    def test_add_connection_async_returns_future(
-        self, mock_thread, mock_context, mock_nm_client
-    ):
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
+    def test_add_connection_async_returns_future(self, mock_thread, mock_context, mock_nm_client):
         """Test that add_connection_async returns a Future."""
         mock_context_instance = MagicMock()
         mock_context.return_value = mock_context_instance
@@ -334,9 +331,9 @@ class TestConnectionManagement:
 
         assert isinstance(future, Future)
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
     def test_activate_connection_async_returns_future(
         self, mock_thread, mock_context, mock_nm_client
     ):
@@ -355,9 +352,9 @@ class TestConnectionManagement:
 
         assert isinstance(future, Future)
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
     def test_remove_connection_async_returns_future(
         self, mock_thread, mock_context, mock_nm_client
     ):
@@ -376,12 +373,10 @@ class TestConnectionManagement:
 
         assert isinstance(future, Future)
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
-    def test_get_connection_by_uuid(
-        self, mock_thread, mock_context, mock_nm_client
-    ):
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
+    def test_get_connection_by_uuid(self, mock_thread, mock_context, mock_nm_client):
         """Test get_connection_by_uuid delegates to NM.Client."""
         mock_context_instance = MagicMock()
         mock_context.return_value = mock_context_instance
@@ -399,12 +394,10 @@ class TestConnectionManagement:
         assert result == mock_connection
         mock_nm_instance.get_connection_by_uuid.assert_called_once_with("test-uuid")
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
-    def test_get_connection_by_id(
-        self, mock_thread, mock_context, mock_nm_client
-    ):
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
+    def test_get_connection_by_id(self, mock_thread, mock_context, mock_nm_client):
         """Test get_connection_by_id delegates to NM.Client."""
         mock_context_instance = MagicMock()
         mock_context.return_value = mock_context_instance
@@ -422,12 +415,10 @@ class TestConnectionManagement:
         assert result == mock_connection
         mock_nm_instance.get_connection_by_id.assert_called_once_with("test-id")
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
-    def test_list_connections(
-        self, mock_thread, mock_context, mock_nm_client
-    ):
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
+    def test_list_connections(self, mock_thread, mock_context, mock_nm_client):
         """Test list_connections delegates to NM.Client."""
         mock_context_instance = MagicMock()
         mock_context.return_value = mock_context_instance
@@ -445,23 +436,21 @@ class TestConnectionManagement:
         assert result == mock_connections
         mock_nm_instance.get_connections.assert_called_once()
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
-    def test_get_active_connection_found(
-        self, mock_thread, mock_context, mock_nm_client
-    ):
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
+    def test_get_active_connection_found(self, mock_thread, mock_context, mock_nm_client):
         """Test get_active_connection returns active connection when found."""
         mock_context_instance = MagicMock()
         mock_context.return_value = mock_context_instance
         mock_nm_instance = MagicMock()
-        
+
         # Create mock active connection
         mock_active_conn = MagicMock()
         mock_remote_conn = MagicMock()
         mock_remote_conn.get_id.return_value = "test-id"
         mock_active_conn.get_connection.return_value = mock_remote_conn
-        
+
         mock_nm_instance.get_active_connections.return_value = [mock_active_conn]
         mock_nm_client.return_value = mock_nm_instance
         mock_thread_instance = MagicMock()
@@ -473,12 +462,10 @@ class TestConnectionManagement:
 
         assert result == mock_active_conn
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
-    def test_get_active_connection_not_found(
-        self, mock_thread, mock_context, mock_nm_client
-    ):
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
+    def test_get_active_connection_not_found(self, mock_thread, mock_context, mock_nm_client):
         """Test get_active_connection returns None when not found."""
         mock_context_instance = MagicMock()
         mock_context.return_value = mock_context_instance
@@ -505,12 +492,10 @@ class TestReapplyConnection:
         NMClient._main_loop = None
         NMClient._main_loop_thread = None
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
-    def test_reapply_connection_success(
-        self, mock_thread, mock_context, mock_nm_client
-    ):
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
+    def test_reapply_connection_success(self, mock_thread, mock_context, mock_nm_client):
         """Test successful connection reapply."""
         mock_context_instance = MagicMock()
         mock_context.return_value = mock_context_instance
@@ -529,12 +514,10 @@ class TestReapplyConnection:
 
         assert result is True
 
-    @patch('pia_nm.dbus_client.NM.Client')
-    @patch('pia_nm.dbus_client.GLib.MainContext')
-    @patch('pia_nm.dbus_client.Thread')
-    def test_reapply_connection_failure(
-        self, mock_thread, mock_context, mock_nm_client
-    ):
+    @patch("pia_nm.dbus_client.NM.Client")
+    @patch("pia_nm.dbus_client.GLib.MainContext")
+    @patch("pia_nm.dbus_client.Thread")
+    def test_reapply_connection_failure(self, mock_thread, mock_context, mock_nm_client):
         """Test connection reapply handles errors."""
         mock_context_instance = MagicMock()
         mock_context_instance.invoke_full.side_effect = RuntimeError("Reapply failed")

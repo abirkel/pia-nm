@@ -414,7 +414,7 @@ class TestLastRefreshTimestamp:
     def test_update_last_refresh_sets_timestamp(self, tmp_path):
         """Test that update_last_refresh sets current timestamp."""
         from datetime import timezone
-        
+
         config_path = tmp_path / "config.yaml"
         manager = ConfigManager(config_path=config_path)
 

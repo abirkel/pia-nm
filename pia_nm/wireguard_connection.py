@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from typing import List
 
 import gi
+
 gi.require_version("NM", "1.0")  # noqa: required before importing NM module
 # pylint: disable=wrong-import-position
 from gi.repository import NM, GObject  # noqa: GObject must be imported for NM to work
@@ -44,10 +45,10 @@ logger = logging.getLogger(__name__)
 class WireGuardConfig:
     """
     WireGuard connection configuration for PIA VPN.
-    
+
     This dataclass contains all the necessary information to create a
     WireGuard connection profile in NetworkManager.
-    
+
     Attributes:
         connection_name: Human-readable connection name (e.g., "PIA-US-East")
         interface_name: Network interface name (e.g., "wg-pia-us-east")
@@ -62,6 +63,7 @@ class WireGuardConfig:
         use_vpn_dns: Whether to use VPN DNS servers (default: True)
         ipv6_enabled: Whether to enable IPv6 (default: False)
     """
+
     connection_name: str
     interface_name: str
     private_key: str
@@ -79,10 +81,10 @@ class WireGuardConfig:
 def create_wireguard_connection(config: WireGuardConfig) -> NM.SimpleConnection:
     """
     Create a WireGuard connection using NetworkManager D-Bus API.
-    
+
     This function builds a complete NM.SimpleConnection object configured
     for WireGuard VPN with proper peer configuration, DNS, and routing.
-    
+
     The connection is created with the following characteristics:
     - WireGuard peer with specified public key, endpoint, and allowed-ips
     - Manual IPv4 configuration with /32 prefix
@@ -90,17 +92,17 @@ def create_wireguard_connection(config: WireGuardConfig) -> NM.SimpleConnection:
     - IPv6 disabled by default
     - No autoconnect
     - Volatile (not saved to disk)
-    
+
     Args:
         config: WireGuardConfig containing all connection parameters
-    
+
     Returns:
         NM.SimpleConnection configured for WireGuard VPN
-    
+
     Raises:
         ValueError: If configuration is invalid or connection validation fails
         RuntimeError: If connection creation fails
-    
+
     Example:
         >>> config = WireGuardConfig(
         ...     connection_name="PIA-US-East",
@@ -114,19 +116,19 @@ def create_wireguard_connection(config: WireGuardConfig) -> NM.SimpleConnection:
         >>> connection = create_wireguard_connection(config)
     """
     logger.info("Creating WireGuard connection: %s", config.connection_name)
-    
+
     # Validate configuration
     _validate_config(config)
-    
+
     # Create the base connection object
     connection = NM.SimpleConnection.new()
-    
+
     # Add all settings to the connection
     _add_connection_settings(connection, config)
     _add_wireguard_settings(connection, config)
     _add_ipv4_settings(connection, config)
     _add_ipv6_settings(connection, config)
-    
+
     # Validate the complete connection
     try:
         connection.verify()
@@ -134,130 +136,116 @@ def create_wireguard_connection(config: WireGuardConfig) -> NM.SimpleConnection:
     except Exception as exc:
         logger.error("Connection validation failed: %s", exc)
         raise ValueError(f"Connection validation failed: {exc}") from exc
-    
+
     return connection
 
 
 def _validate_config(config: WireGuardConfig) -> None:
     """
     Validate WireGuardConfig parameters.
-    
+
     Args:
         config: WireGuardConfig to validate
-    
+
     Raises:
         ValueError: If any configuration parameter is invalid
     """
     if not config.connection_name:
         raise ValueError("connection_name cannot be empty")
-    
+
     if not config.interface_name:
         raise ValueError("interface_name cannot be empty")
-    
+
     if len(config.interface_name) > 15:
         raise ValueError(
             f"interface_name too long: {len(config.interface_name)} chars "
             f"(max 15): {config.interface_name}"
         )
-    
+
     if not config.private_key:
         raise ValueError("private_key cannot be empty")
-    
+
     if not config.server_pubkey:
         raise ValueError("server_pubkey cannot be empty")
-    
+
     if not config.server_endpoint:
         raise ValueError("server_endpoint cannot be empty")
-    
+
     if ":" not in config.server_endpoint:
-        raise ValueError(
-            f"server_endpoint must be in 'ip:port' format: {config.server_endpoint}"
-        )
-    
+        raise ValueError(f"server_endpoint must be in 'ip:port' format: {config.server_endpoint}")
+
     if not config.peer_ip:
         raise ValueError("peer_ip cannot be empty")
-    
+
     if not config.dns_servers:
         raise ValueError("dns_servers cannot be empty")
 
 
-def _add_connection_settings(
-    connection: NM.SimpleConnection,
-    config: WireGuardConfig
-) -> None:
+def _add_connection_settings(connection: NM.SimpleConnection, config: WireGuardConfig) -> None:
     """
     Add NM.SettingConnection to the connection.
-    
+
     This sets the connection name, UUID, type, interface name, and
     autoconnect behavior.
-    
+
     Args:
         connection: NM.SimpleConnection to add settings to
         config: WireGuardConfig with connection parameters
     """
     logger.debug("Adding connection settings for: %s", config.connection_name)
-    
+
     # Create connection settings
     conn_settings = NM.SettingConnection.new()
-    
+
     # Set connection ID (human-readable name)
     conn_settings.set_property(NM.SETTING_CONNECTION_ID, config.connection_name)
-    
+
     # Generate and set UUID
     connection_uuid = str(uuid.uuid4())
     conn_settings.set_property(NM.SETTING_CONNECTION_UUID, connection_uuid)
     logger.debug("Generated UUID: %s", connection_uuid)
-    
+
     # Set connection type to WireGuard
-    conn_settings.set_property(
-        NM.SETTING_CONNECTION_TYPE,
-        NM.SETTING_WIREGUARD_SETTING_NAME
-    )
-    
+    conn_settings.set_property(NM.SETTING_CONNECTION_TYPE, NM.SETTING_WIREGUARD_SETTING_NAME)
+
     # Set interface name
-    conn_settings.set_property(
-        NM.SETTING_CONNECTION_INTERFACE_NAME,
-        config.interface_name
-    )
-    
+    conn_settings.set_property(NM.SETTING_CONNECTION_INTERFACE_NAME, config.interface_name)
+
     # Disable autoconnect (user must manually activate)
     conn_settings.set_property(NM.SETTING_CONNECTION_AUTOCONNECT, False)
-    
+
     # Add the settings to the connection
     connection.add_setting(conn_settings)
 
 
-def _add_wireguard_settings(
-    connection: NM.SimpleConnection,
-    config: WireGuardConfig
-) -> None:
+def _add_wireguard_settings(connection: NM.SimpleConnection, config: WireGuardConfig) -> None:
     """
     Add NM.SettingWireGuard with peer configuration to the connection.
-    
+
     This creates the WireGuard peer with public key, endpoint, allowed-ips,
     and keepalive settings, then adds it to the WireGuard settings.
-    
+
     Args:
         connection: NM.SimpleConnection to add settings to
         config: WireGuardConfig with WireGuard parameters
     """
     logger.debug("Adding WireGuard settings for: %s", config.connection_name)
-    
+
     # Create WireGuard peer
     peer = _create_wireguard_peer(config)
-    
+
     # Create WireGuard settings and add peer
     wg_settings = NM.SettingWireGuard.new()
-    
+
     # Set private key
     wg_settings.set_property(NM.SETTING_WIREGUARD_PRIVATE_KEY, config.private_key)
-    
+
     # Set firewall mark
     wg_settings.set_property(NM.SETTING_WIREGUARD_FWMARK, config.fwmark)
-    
+
     # Append the configured peer
     wg_settings.append_peer(peer)
-    
+
     # Add the settings to the connection
     connection.add_setting(wg_settings)
 
@@ -265,47 +253,47 @@ def _add_wireguard_settings(
 def _create_wireguard_peer(config: WireGuardConfig) -> NM.WireGuardPeer:
     """
     Create and configure a WireGuard peer.
-    
+
     This creates an NM.WireGuardPeer object with the server's public key,
     endpoint, allowed-ips, and persistent keepalive. The peer is sealed
     (made immutable) and validated before being returned.
-    
+
     Args:
         config: WireGuardConfig with peer parameters
-    
+
     Returns:
         Configured and sealed NM.WireGuardPeer
-    
+
     Raises:
         ValueError: If peer validation fails
     """
     logger.debug("Creating WireGuard peer for endpoint: %s", config.server_endpoint)
-    
+
     # Create new peer object
     peer = NM.WireGuardPeer.new()
-    
+
     # Set server public key
     # The second parameter is "allow_invalid" - False means validate the key format
     # Note: The key must be a valid base64-encoded Curve25519 public key (44 chars)
     peer.set_public_key(config.server_pubkey, False)
-    
+
     # Set server endpoint (ip:port)
     peer.set_endpoint(config.server_endpoint, False)
-    
+
     # Set allowed-ips (routes through VPN)
     peer.append_allowed_ip(config.allowed_ips, False)
     logger.debug("Set allowed-ips: %s", config.allowed_ips)
-    
+
     # Set persistent keepalive (if non-zero)
     if config.persistent_keepalive > 0:
         peer.set_persistent_keepalive(config.persistent_keepalive)
-    
+
     # Seal the peer to make it immutable
     # After sealing, the peer cannot be modified (except ref/unref)
     # This is required by NetworkManager before the peer can be used
     peer.seal()
     logger.debug("Peer sealed (made immutable)")
-    
+
     # Validate the peer configuration
     # This ensures all required fields are set correctly
     # Parameters: (check_interface, check_property) - both True for strict validation
@@ -317,100 +305,85 @@ def _create_wireguard_peer(config: WireGuardConfig) -> NM.WireGuardPeer:
     except Exception as exc:
         logger.error("Peer validation failed: %s", exc)
         raise ValueError(f"Peer validation failed: {exc}") from exc
-    
+
     return peer
 
 
-def _add_ipv4_settings(
-    connection: NM.SimpleConnection,
-    config: WireGuardConfig
-) -> None:
+def _add_ipv4_settings(connection: NM.SimpleConnection, config: WireGuardConfig) -> None:
     """
     Add NM.SettingIP4Config to the connection.
-    
+
     This configures IPv4 with manual addressing, DNS servers, and routing.
-    
+
     Args:
         connection: NM.SimpleConnection to add settings to
         config: WireGuardConfig with IPv4 parameters
     """
     logger.debug("Adding IPv4 settings for: %s", config.connection_name)
-    
+
     # Create IPv4 configuration
     ipv4_config = NM.SettingIP4Config.new()
-    
+
     # Set method to manual (we specify the address)
-    ipv4_config.set_property(
-        NM.SETTING_IP_CONFIG_METHOD,
-        NM.SETTING_IP4_CONFIG_METHOD_MANUAL
-    )
-    
+    ipv4_config.set_property(NM.SETTING_IP_CONFIG_METHOD, NM.SETTING_IP4_CONFIG_METHOD_MANUAL)
+
     # Add peer IP address with /32 prefix
     # The /32 prefix means this is a point-to-point connection
     ip_address = NM.IPAddress.new(socket.AF_INET, config.peer_ip, 32)
     ipv4_config.add_address(ip_address)
     logger.debug("Set peer IP: %s/32", config.peer_ip)
-    
+
     # Configure DNS if use_vpn_dns is enabled
     if config.use_vpn_dns:
         # Set DNS priority to -1500 (highest priority)
         # This ensures VPN DNS takes precedence over system DNS
         ipv4_config.set_property(NM.SETTING_IP_CONFIG_DNS_PRIORITY, -1500)
-        
+
         # Ignore auto DNS from DHCP
         ipv4_config.set_property(NM.SETTING_IP_CONFIG_IGNORE_AUTO_DNS, True)
-        
+
         # Add DNS servers
         for dns_server in config.dns_servers:
             ipv4_config.add_dns(dns_server)
         logger.debug("Added DNS servers: %s", config.dns_servers)
-        
+
         # Add DNS search domain "~" to route all DNS queries through VPN
         # The "~" is a special NetworkManager syntax meaning "route all domains"
         ipv4_config.add_dns_search("~")
         logger.debug("Added DNS search domain: ~")
     else:
         logger.debug("VPN DNS disabled, using system DNS")
-    
+
     # Add the settings to the connection
     connection.add_setting(ipv4_config)
 
 
-def _add_ipv6_settings(
-    connection: NM.SimpleConnection,
-    config: WireGuardConfig
-) -> None:
+def _add_ipv6_settings(connection: NM.SimpleConnection, config: WireGuardConfig) -> None:
     """
     Add NM.SettingIP6Config to the connection.
-    
+
     This configures IPv6 (disabled by default).
-    
+
     Args:
         connection: NM.SimpleConnection to add settings to
         config: WireGuardConfig with IPv6 parameters
     """
     logger.debug("Adding IPv6 settings for: %s", config.connection_name)
-    
+
     # Create IPv6 configuration
     ipv6_config = NM.SettingIP6Config.new()
-    
+
     # Check if IPv6 is enabled
     if config.ipv6_enabled:
         # IPv6 is enabled - would configure manual addressing here
         # This is a placeholder for future IPv6 support
         logger.debug("IPv6 enabled (future feature)")
-        ipv6_config.set_property(
-            NM.SETTING_IP_CONFIG_METHOD,
-            NM.SETTING_IP6_CONFIG_METHOD_MANUAL
-        )
+        ipv6_config.set_property(NM.SETTING_IP_CONFIG_METHOD, NM.SETTING_IP6_CONFIG_METHOD_MANUAL)
         # TODO: Add IPv6 address, DNS, etc. when PIA supports it
     else:
         # IPv6 is disabled (default)
         logger.debug("IPv6 disabled")
-        ipv6_config.set_property(
-            NM.SETTING_IP_CONFIG_METHOD,
-            NM.SETTING_IP6_CONFIG_METHOD_DISABLED
-        )
-    
+        ipv6_config.set_property(NM.SETTING_IP_CONFIG_METHOD, NM.SETTING_IP6_CONFIG_METHOD_DISABLED)
+
     # Add the settings to the connection
     connection.add_setting(ipv6_config)

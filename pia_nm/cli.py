@@ -97,7 +97,7 @@ def check_system_dependencies() -> bool:
 
 def format_profile_name(region_name: str) -> str:
     """Format region name into profile name.
-    
+
     NetworkManager connection names are limited to 32 characters.
     Converts 'us-east' to 'PIA-US-East' format.
     Country codes are uppercase, city names are title case.
@@ -113,7 +113,7 @@ def format_profile_name(region_name: str) -> str:
             # Other parts (city names) are title case
             formatted_parts.append(part.capitalize())
     clean_name = "-".join(formatted_parts)
-    
+
     # Truncate if needed (PIA- prefix is 4 chars, max 28 chars for region)
     if len(clean_name) > 28:
         clean_name = clean_name[:28]
@@ -315,15 +315,15 @@ def cmd_setup() -> None:
             # Create NetworkManager profile using D-Bus
             region_name = region_data.get("name", region_id)
             profile_name = format_profile_name(region_name)
-            
+
             # Generate interface name (max 15 chars)
             interface_name = f"wg-pia-{region_id}"
             if len(interface_name) > 15:
                 # Truncate if too long
                 interface_name = interface_name[:15]
-            
+
             log_nm_operation("create_connection via D-Bus", profile_name)
-            
+
             # Create WireGuard connection configuration
             wg_config = WireGuardConfig(
                 connection_name=profile_name,
@@ -334,13 +334,13 @@ def cmd_setup() -> None:
                 peer_ip=conn_details["peer_ip"],
                 dns_servers=conn_details["dns_servers"],
             )
-            
+
             # Create the connection object
             connection = create_wireguard_connection(wg_config)
-            
+
             # Add connection to NetworkManager via D-Bus
             future = nm_client.add_connection_async(connection)
-            
+
             # Wait for the operation to complete (with timeout)
             try:
                 remote_connection = future.result(timeout=10)
@@ -354,9 +354,7 @@ def cmd_setup() -> None:
                 )
             except Exception as conn_exc:
                 print(f"✗ ({conn_exc})")
-                log_operation_failure(
-                    f"setup region {region_id}", conn_exc
-                )
+                log_operation_failure(f"setup region {region_id}", conn_exc)
 
         except Exception as e:
             print(f"✗ ({e})")
@@ -614,35 +612,33 @@ def cmd_refresh(region: Optional[str] = None) -> None:
             # Get connection by name
             region_name = region_data.get("name", region_id)
             profile_name = format_profile_name(region_name)
-            
+
             log_nm_operation("get_connection_by_id", profile_name)
             connection = nm_client.get_connection_by_id(profile_name)
-            
+
             if not connection:
                 print("✗ (connection not found)")
                 log_operation_failure(
-                    f"refresh region {region_id}", Exception("connection not found in NetworkManager")
+                    f"refresh region {region_id}",
+                    Exception("connection not found in NetworkManager"),
                 )
                 failed += 1
                 continue
 
             # Check if connection is active
             is_active = is_connection_active(nm_client, profile_name)
-            
+
             # Prepare new endpoint
             server_endpoint = f"{conn_details['server_ip']}:{conn_details['server_port']}"
-            
+
             # Use appropriate refresh method based on connection state
             if is_active:
                 # Use live refresh (Reapply) for active connections
                 log_nm_operation("refresh_active_connection", profile_name)
                 success = refresh_active_connection(
-                    nm_client,
-                    connection,
-                    private_key,
-                    server_endpoint
+                    nm_client, connection, private_key, server_endpoint
                 )
-                
+
                 if success:
                     print("✓ (live)")
                     live_updated += 1
@@ -658,12 +654,9 @@ def cmd_refresh(region: Optional[str] = None) -> None:
                 # Update saved profile for inactive connections
                 log_nm_operation("refresh_inactive_connection", profile_name)
                 success = refresh_inactive_connection(
-                    nm_client,
-                    connection,
-                    private_key,
-                    server_endpoint
+                    nm_client, connection, private_key, server_endpoint
                 )
-                
+
                 if success:
                     print("✓ (saved)")
                     saved_updated += 1
@@ -695,7 +688,10 @@ def cmd_refresh(region: Optional[str] = None) -> None:
         print(f"  • {live_updated} connection(s) updated live (no disconnection)")
     if saved_updated > 0:
         print(f"  • {saved_updated} saved profile(s) updated (will use on next activation)")
-    log_operation_success("refresh command", f"successful={successful}, failed={failed}, live={live_updated}, saved={saved_updated}")
+    log_operation_success(
+        "refresh command",
+        f"successful={successful}, failed={failed}, live={live_updated}, saved={saved_updated}",
+    )
     if failed > 0:
         sys.exit(1)
 
@@ -776,23 +772,23 @@ def cmd_add_region(region_id: str) -> None:
             if r["id"] == region_id:
                 region_data = r
                 break
-        
+
         if not region_data:
             print("✗ (region data not found)")
             log_operation_failure("get region data", Exception("region not found"))
             sys.exit(1)
-        
+
         # Get WireGuard server info
         wg_servers = region_data.get("servers", {}).get("wg", [])
         if not wg_servers:
             print("✗ (no WG servers)")
             log_operation_failure("get server info", Exception("No WireGuard servers available"))
             sys.exit(1)
-        
+
         server_info = wg_servers[0]
         server_hostname = server_info.get("cn")
         server_ip = server_info.get("ip")
-        
+
         if not server_hostname or not server_ip:
             print("✗ (invalid server info)")
             log_operation_failure("get server info", Exception("Invalid server information"))
@@ -817,15 +813,15 @@ def cmd_add_region(region_id: str) -> None:
     try:
         region_name = region_data.get("name", region_id)
         profile_name = format_profile_name(region_name)
-        
+
         # Generate interface name (max 15 chars)
         interface_name = f"wg-pia-{region_id}"
         if len(interface_name) > 15:
             # Truncate if too long
             interface_name = interface_name[:15]
-        
+
         log_nm_operation("create_connection via D-Bus", profile_name)
-        
+
         # Create WireGuard connection configuration
         wg_config = WireGuardConfig(
             connection_name=profile_name,
@@ -836,13 +832,13 @@ def cmd_add_region(region_id: str) -> None:
             peer_ip=conn_details["peer_ip"],
             dns_servers=conn_details["dns_servers"],
         )
-        
+
         # Create the connection object
         connection = create_wireguard_connection(wg_config)
-        
+
         # Add connection to NetworkManager via D-Bus
         future = nm_client.add_connection_async(connection)
-        
+
         # Wait for the operation to complete (with timeout)
         try:
             remote_connection = future.result(timeout=10)
@@ -925,7 +921,7 @@ def cmd_remove_region(region_id: str) -> None:
                 if r["id"] == region_id:
                     region_data = r
                     break
-            
+
             if region_data:
                 region_name = region_data.get("name", region_id)
                 profile_name = format_profile_name(region_name)
@@ -935,19 +931,19 @@ def cmd_remove_region(region_id: str) -> None:
         except Exception:
             # Fallback to using region_id if API call fails
             profile_name = format_profile_name(region_id)
-        
+
         log_nm_operation("delete_connection via D-Bus", profile_name)
-        
+
         # Get the connection
         connection = nm_client.get_connection_by_id(profile_name)
-        
+
         if not connection:
             print(f"⚠ Warning: Connection '{profile_name}' not found in NetworkManager")
             logger.warning("Connection not found: %s", profile_name)
         else:
             # Remove the connection
             future = nm_client.remove_connection_async(connection)
-            
+
             # Wait for the operation to complete (with timeout)
             try:
                 future.result(timeout=10)
@@ -1041,11 +1037,11 @@ def cmd_status() -> None:
             # Get proper region name for profile lookup
             region_name = region_map.get(region_id, region_id)
             profile_name = format_profile_name(region_name)
-            
+
             # Check if connection exists using D-Bus
             connection = nm_client.get_connection_by_id(profile_name)
             exists = connection is not None
-            
+
             # Check if connection is active using D-Bus
             active = False
             if exists:
@@ -1143,14 +1139,14 @@ def cmd_uninstall() -> None:
             # Get proper region name for profile lookup
             region_name = region_map.get(region_id, region_id)
             profile_name = format_profile_name(region_name)
-            
+
             try:
                 if nm_client:
                     log_nm_operation("delete_connection via D-Bus", profile_name)
-                    
+
                     # Get the connection
                     connection = nm_client.get_connection_by_id(profile_name)
-                    
+
                     if connection:
                         # Remove the connection
                         future = nm_client.remove_connection_async(connection)

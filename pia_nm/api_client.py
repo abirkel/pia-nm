@@ -244,7 +244,7 @@ class PIAClient:
 
             try:
                 # The endpoint returns multiple JSON objects, get only the first line
-                first_line = response.text.split('\n')[0]
+                first_line = response.text.split("\n")[0]
                 data = json.loads(first_line)
                 if not isinstance(data, dict):
                     raise APIError("Response is not a JSON object")
