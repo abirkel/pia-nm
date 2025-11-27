@@ -62,7 +62,7 @@ def check_system_dependencies() -> bool:
     """Verify required system commands are available."""
     import shutil
 
-    required = ["nmcli", "wg", "systemctl"]
+    required = ["wg", "systemctl"]
     missing = []
 
     for cmd in required:
@@ -72,7 +72,7 @@ def check_system_dependencies() -> bool:
     if missing:
         print(f"✗ Missing required commands: {', '.join(missing)}\n")
         print("Install missing dependencies:")
-        print("  sudo dnf install NetworkManager wireguard-tools systemd\n")
+        print("  sudo dnf install wireguard-tools systemd\n")
         return False
 
     return True
@@ -1103,13 +1103,49 @@ def cmd_uninstall() -> None:
         regions = config.get("regions", [])
         log_operation_success("load configuration for uninstall")
 
+        # Initialize NMClient for D-Bus operations
+        try:
+            nm_client = NMClient()
+        except Exception as e:
+            print(f"  ✗ Failed to initialize NetworkManager D-Bus client: {e}")
+            log_operation_failure("initialize NMClient for uninstall", e)
+            # Continue with uninstall even if NM client fails
+            nm_client = None
+
+        # Get region data for proper profile names
+        try:
+            api = PIAClient()
+            region_list = api.get_regions()
+            region_map = {r["id"]: r.get("name", r["id"]) for r in region_list}
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.warning("Failed to fetch region data: %s", e)
+            region_map = {}
+
         for region_id in regions:
-            profile_name = format_profile_name(region_id)
+            # Get proper region name for profile lookup
+            region_name = region_map.get(region_id, region_id)
+            profile_name = format_profile_name(region_name)
+            
             try:
-                log_nm_operation("delete_profile", profile_name)
-                delete_profile(profile_name)
-                print(f"  ✓ Removed {profile_name}")
-                log_operation_success(f"delete profile {profile_name}")
+                if nm_client:
+                    log_nm_operation("delete_connection via D-Bus", profile_name)
+                    
+                    # Get the connection
+                    connection = nm_client.get_connection_by_id(profile_name)
+                    
+                    if connection:
+                        # Remove the connection
+                        future = nm_client.remove_connection_async(connection)
+                        future.result(timeout=10)
+                        print(f"  ✓ Removed {profile_name}")
+                        log_operation_success(f"delete profile {profile_name}")
+                    else:
+                        print(f"  ⚠ Profile {profile_name} not found")
+                        logger = logging.getLogger(__name__)
+                        logger.warning("Profile not found: %s", profile_name)
+                else:
+                    print(f"  ⚠ Skipped {profile_name} (NM client unavailable)")
             except Exception as e:
                 print(f"  ✗ Failed to remove {profile_name}: {e}")
                 log_operation_failure(f"delete profile {profile_name}", e)
