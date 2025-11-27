@@ -200,3 +200,347 @@ def test_property_active_connection_preservation(num_regions, num_active):
                     f"Region {region_id} was inactive before but not tracked after refresh"
                 assert not connections_after[region_id], \
                     f"Region {region_id} was inactive before refresh but became active after"
+
+
+
+# Unit tests for CLI commands with D-Bus operations
+import sys
+sys.modules['gi'] = MagicMock()
+sys.modules['gi.repository'] = MagicMock()
+mock_nm = MagicMock()
+sys.modules['gi.repository.NM'] = mock_nm
+
+
+class TestCmdSetup:
+    """Test cmd_setup with D-Bus operations."""
+
+    @patch("pia_nm.cli.ConfigManager")
+    @patch("pia_nm.cli.PIAClient")
+    @patch("pia_nm.cli.NMClient")
+    @patch("pia_nm.cli.generate_keypair")
+    @patch("pia_nm.cli.save_keypair")
+    @patch("pia_nm.cli.create_wireguard_connection")
+    @patch("pia_nm.cli.format_profile_name")
+    @patch("pia_nm.cli.check_system_dependencies")
+    @patch("os.geteuid")
+    @patch("builtins.input")
+    @patch("getpass.getpass")
+    @patch("builtins.print")
+    def test_cmd_setup_creates_connections_via_dbus(
+        self,
+        mock_print,
+        mock_getpass,
+        mock_input,
+        mock_geteuid,
+        mock_check_deps,
+        mock_format_name,
+        mock_create_wg_conn,
+        mock_save_keypair,
+        mock_generate_keypair,
+        mock_nm_client_class,
+        mock_api_client_class,
+        mock_config_mgr_class
+    ):
+        """Test that cmd_setup creates connections via D-Bus."""
+        from pia_nm.cli import cmd_setup
+        from concurrent.futures import Future
+        
+        # Mock running as root
+        mock_geteuid.return_value = 0
+        
+        # Mock system dependencies check
+        mock_check_deps.return_value = True
+        
+        # Mock user input - need multiple inputs for the setup flow
+        mock_input.side_effect = ["testuser", "us-east"]
+        mock_getpass.return_value = "testpass"
+        
+        # Mock config manager
+        mock_config_mgr = MagicMock()
+        mock_config_mgr_class.return_value = mock_config_mgr
+        
+        # Mock API client
+        mock_api_client = MagicMock()
+        mock_api_client.authenticate.return_value = "test_token"
+        mock_api_client.get_regions.return_value = [{
+            "id": "us-east",
+            "name": "US East",
+            "servers": {"wg": [{"cn": "us-east.example.com", "ip": "192.0.2.1"}]}
+        }]
+        mock_api_client.register_key.return_value = {
+            "server_key": "server_key",
+            "server_ip": "192.0.2.1",
+            "server_port": 1337,
+            "peer_ip": "10.0.0.1",
+            "dns_servers": ["10.0.0.242"]
+        }
+        mock_api_client_class.return_value = mock_api_client
+        
+        # Mock NM client
+        mock_nm_client = MagicMock()
+        mock_future = Future()
+        mock_remote_conn = MagicMock()
+        mock_future.set_result(mock_remote_conn)
+        mock_nm_client.add_connection_async.return_value = mock_future
+        mock_nm_client_class.return_value = mock_nm_client
+        
+        # Mock keypair generation
+        mock_generate_keypair.return_value = ("private_key", "public_key")
+        
+        # Mock connection creation
+        mock_connection = MagicMock()
+        mock_create_wg_conn.return_value = mock_connection
+        
+        # Mock format_profile_name
+        mock_format_name.return_value = "PIA-US-East"
+        
+        # Run setup
+        cmd_setup()
+        
+        # Verify NM client was used to add connection
+        mock_nm_client.add_connection_async.assert_called_once_with(mock_connection)
+
+
+class TestCmdRefresh:
+    """Test cmd_refresh with D-Bus operations."""
+
+    @patch("pia_nm.cli.ConfigManager")
+    @patch("pia_nm.cli.PIAClient")
+    @patch("pia_nm.cli.NMClient")
+    @patch("pia_nm.cli.load_keypair")
+    @patch("pia_nm.cli.is_connection_active")
+    @patch("pia_nm.cli.refresh_active_connection")
+    @patch("pia_nm.cli.refresh_inactive_connection")
+    @patch("pia_nm.cli.format_profile_name")
+    @patch("builtins.print")
+    def test_cmd_refresh_uses_dbus_operations(
+        self,
+        mock_print,
+        mock_format_name,
+        mock_refresh_inactive,
+        mock_refresh_active,
+        mock_is_active,
+        mock_load_keypair,
+        mock_nm_client_class,
+        mock_api_client_class,
+        mock_config_mgr_class
+    ):
+        """Test that cmd_refresh uses D-Bus operations."""
+        from pia_nm.cli import cmd_refresh
+        
+        # Mock config manager
+        mock_config_mgr = MagicMock()
+        mock_config_mgr.load.return_value = {
+            "regions": ["us-east"],
+            "preferences": {"dns": True, "ipv6": False, "port_forwarding": False},
+            "metadata": {"version": 1, "last_refresh": None}
+        }
+        mock_config_mgr.get_credentials.return_value = ("user", "pass")
+        mock_config_mgr_class.return_value = mock_config_mgr
+        
+        # Mock API client
+        mock_api_client = MagicMock()
+        mock_api_client.authenticate.return_value = "test_token"
+        mock_api_client.get_regions.return_value = [{
+            "id": "us-east",
+            "name": "US East",
+            "servers": {"wg": [{"cn": "us-east.example.com", "ip": "192.0.2.1"}]}
+        }]
+        mock_api_client.register_key.return_value = {
+            "server_key": "server_key",
+            "server_ip": "192.0.2.1",
+            "server_port": 1337,
+            "peer_ip": "10.0.0.1",
+            "dns_servers": ["10.0.0.242"]
+        }
+        mock_api_client_class.return_value = mock_api_client
+        
+        # Mock NM client
+        mock_nm_client = MagicMock()
+        mock_connection = MagicMock()
+        mock_connection.get_id.return_value = "PIA-US-East"
+        mock_nm_client.get_connection_by_id.return_value = mock_connection
+        mock_nm_client_class.return_value = mock_nm_client
+        
+        # Mock keypair loading
+        mock_load_keypair.return_value = ("private_key", "public_key")
+        
+        # Mock format_profile_name
+        mock_format_name.return_value = "PIA-US-East"
+        
+        # Mock connection as active
+        mock_is_active.return_value = True
+        mock_refresh_active.return_value = True
+        
+        # Run refresh
+        cmd_refresh(region=None)
+        
+        # Verify D-Bus operations were used
+        mock_nm_client.get_connection_by_id.assert_called_once_with("PIA-US-East")
+        mock_is_active.assert_called_once()
+        mock_refresh_active.assert_called_once()
+
+
+class TestCmdAddRegion:
+    """Test cmd_add_region with D-Bus operations."""
+
+    @patch("pia_nm.cli.ConfigManager")
+    @patch("pia_nm.cli.PIAClient")
+    @patch("pia_nm.cli.NMClient")
+    @patch("pia_nm.cli.generate_keypair")
+    @patch("pia_nm.cli.save_keypair")
+    @patch("pia_nm.cli.create_wireguard_connection")
+    @patch("pia_nm.cli.format_profile_name")
+    @patch("builtins.print")
+    def test_cmd_add_region_uses_dbus(
+        self,
+        mock_print,
+        mock_format_name,
+        mock_create_wg_conn,
+        mock_save_keypair,
+        mock_generate_keypair,
+        mock_nm_client_class,
+        mock_api_client_class,
+        mock_config_mgr_class
+    ):
+        """Test that cmd_add_region uses D-Bus to add connection."""
+        from pia_nm.cli import cmd_add_region
+        from concurrent.futures import Future
+        
+        # Mock config manager
+        mock_config_mgr = MagicMock()
+        mock_config_mgr.get_credentials.return_value = ("user", "pass")
+        mock_config_mgr_class.return_value = mock_config_mgr
+        
+        # Mock API client
+        mock_api_client = MagicMock()
+        mock_api_client.authenticate.return_value = "test_token"
+        mock_api_client.get_regions.return_value = [{
+            "id": "us-east",
+            "name": "US East",
+            "servers": {"wg": [{"cn": "us-east.example.com", "ip": "192.0.2.1"}]}
+        }]
+        mock_api_client.register_key.return_value = {
+            "server_key": "server_key",
+            "server_ip": "192.0.2.1",
+            "server_port": 1337,
+            "peer_ip": "10.0.0.1",
+            "dns_servers": ["10.0.0.242"]
+        }
+        mock_api_client_class.return_value = mock_api_client
+        
+        # Mock NM client
+        mock_nm_client = MagicMock()
+        mock_future = Future()
+        mock_remote_conn = MagicMock()
+        mock_future.set_result(mock_remote_conn)
+        mock_nm_client.add_connection_async.return_value = mock_future
+        mock_nm_client_class.return_value = mock_nm_client
+        
+        # Mock keypair generation
+        mock_generate_keypair.return_value = ("private_key", "public_key")
+        
+        # Mock connection creation
+        mock_connection = MagicMock()
+        mock_create_wg_conn.return_value = mock_connection
+        
+        # Mock format_profile_name
+        mock_format_name.return_value = "PIA-US-East"
+        
+        # Run add_region
+        cmd_add_region("us-east")
+        
+        # Verify D-Bus was used to add connection
+        mock_nm_client.add_connection_async.assert_called_once_with(mock_connection)
+
+
+class TestCmdRemoveRegion:
+    """Test cmd_remove_region with D-Bus operations."""
+
+    @patch("pia_nm.cli.ConfigManager")
+    @patch("pia_nm.cli.NMClient")
+    @patch("pia_nm.cli.format_profile_name")
+    @patch("builtins.print")
+    def test_cmd_remove_region_uses_dbus(
+        self,
+        mock_print,
+        mock_format_name,
+        mock_nm_client_class,
+        mock_config_mgr_class
+    ):
+        """Test that cmd_remove_region uses D-Bus to remove connection."""
+        from pia_nm.cli import cmd_remove_region
+        from concurrent.futures import Future
+        
+        # Mock config manager - region must be in config
+        mock_config_mgr = MagicMock()
+        mock_config_mgr.load.return_value = {
+            "regions": ["us-east"],
+            "preferences": {"dns": True, "ipv6": False, "port_forwarding": False},
+            "metadata": {"version": 1, "last_refresh": None}
+        }
+        mock_config_mgr_class.return_value = mock_config_mgr
+        
+        # Mock NM client
+        mock_nm_client = MagicMock()
+        mock_connection = MagicMock()
+        mock_nm_client.get_connection_by_id.return_value = mock_connection
+        
+        mock_future = Future()
+        mock_future.set_result(True)
+        mock_nm_client.remove_connection_async.return_value = mock_future
+        mock_nm_client_class.return_value = mock_nm_client
+        
+        # Mock format_profile_name
+        mock_format_name.return_value = "PIA-US-East"
+        
+        # Run remove_region
+        cmd_remove_region("us-east")
+        
+        # Verify D-Bus was used to remove connection
+        mock_nm_client.get_connection_by_id.assert_called_once_with("PIA-US-East")
+        mock_nm_client.remove_connection_async.assert_called_once_with(mock_connection)
+
+
+class TestCmdStatus:
+    """Test cmd_status with D-Bus operations."""
+
+    @patch("pia_nm.cli.ConfigManager")
+    @patch("pia_nm.cli.NMClient")
+    @patch("pia_nm.cli.format_profile_name")
+    @patch("builtins.print")
+    def test_cmd_status_uses_dbus(
+        self,
+        mock_print,
+        mock_format_name,
+        mock_nm_client_class,
+        mock_config_mgr_class
+    ):
+        """Test that cmd_status uses D-Bus to query connections."""
+        from pia_nm.cli import cmd_status
+        
+        # Mock config manager
+        mock_config_mgr = MagicMock()
+        mock_config_mgr.load.return_value = {
+            "regions": ["us-east"],
+            "preferences": {"dns": True, "ipv6": False, "port_forwarding": False},
+            "metadata": {"version": 1, "last_refresh": "2025-11-13T10:30:00Z"}
+        }
+        mock_config_mgr_class.return_value = mock_config_mgr
+        
+        # Mock NM client
+        mock_nm_client = MagicMock()
+        mock_connection = MagicMock()
+        mock_nm_client.get_connection_by_id.return_value = mock_connection
+        mock_nm_client.get_active_connection.return_value = None  # Inactive
+        mock_nm_client_class.return_value = mock_nm_client
+        
+        # Mock format_profile_name
+        mock_format_name.return_value = "PIA-US-East"
+        
+        # Run status
+        cmd_status()
+        
+        # Verify D-Bus was used to query connection
+        mock_nm_client.get_connection_by_id.assert_called_once_with("PIA-US-East")
+        mock_nm_client.get_active_connection.assert_called_once_with("PIA-US-East")
