@@ -27,8 +27,13 @@ jobs:
 
       - name: Build PEX
         run: |
+          cat > requirements.txt << 'EOF'
+          requests>=2.31.0
+          keyring>=24.0.0
+          PyYAML>=6.0
+          EOF
           pex . \
-            -r <(echo "requests>=2.31.0" && echo "keyring>=24.0.0" && echo "PyYAML>=6.0") \
+            -r requirements.txt \
             -c pia-nm \
             -o pia-nm.pex \
             --python-shebang "/usr/bin/env python3" \
