@@ -83,13 +83,25 @@ class NMClient:
         # Create a new GLib MainContext for this thread
         cls._main_context = GLib.MainContext()
 
-        # Create the NM client (not yet connected)
+        # Create an uninitialized NM client
         cls._nm_client = NM.Client()
 
         # Start the GLib MainLoop in a daemon thread
         # Daemon=True means the thread exits when the main process exits
         cls._main_loop_thread = Thread(target=cls._run_main_loop, daemon=True)
         cls._main_loop_thread.start()
+
+        # Initialize the NM client asynchronously on the MainLoop thread
+        callback, future = cls.create_callback(finish_method_name="new_finish")
+
+        def new_async():
+            cls._assert_running_on_main_loop_thread()
+            cls._nm_client.new_async(cancellable=None, callback=callback, user_data=None)
+
+        cls._run_on_main_loop(new_async)
+
+        # Wait for initialization to complete and replace with initialized client
+        cls._nm_client = future.result()
 
         logger.info("NM client singleton initialized with GLib MainLoop")
 
@@ -103,11 +115,13 @@ class NMClient:
         """
         logger.debug("Starting GLib MainLoop in daemon thread")
 
-        # Push the main context as the default for this thread
+        # Create the main loop first
+        cls._main_loop = GLib.MainLoop(cls._main_context)
+
+        # Then push the main context as the default for this thread
         cls._main_context.push_thread_default()
 
-        # Create and run the main loop
-        cls._main_loop = GLib.MainLoop(cls._main_context)
+        # Run the main loop
         cls._main_loop.run()
 
         logger.debug("GLib MainLoop stopped")
