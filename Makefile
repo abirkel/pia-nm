@@ -19,8 +19,7 @@ pex:
 		-c pia-nm \
 		-o pia-nm.pex \
 		--python-shebang "/usr/bin/env python3" \
-		--inherit-path=prefer \
-		--venv=prepend
+		--inherit-path=prefer
 	@chmod +x pia-nm.pex
 	@echo "✓ Built: pia-nm.pex"
 
