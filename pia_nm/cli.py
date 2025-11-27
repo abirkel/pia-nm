@@ -42,12 +42,12 @@ from pia_nm.wireguard import (
     should_rotate_key,
     delete_keypair,
 )
-from pia_nm.network_manager import (
-    create_profile,
-    update_profile,
-    delete_profile,
-    is_active,
-    profile_exists,
+from pia_nm.dbus_client import NMClient
+from pia_nm.wireguard_connection import create_wireguard_connection, WireGuardConfig
+from pia_nm.token_refresh import (
+    is_connection_active,
+    refresh_active_connection,
+    refresh_inactive_connection,
 )
 from pia_nm.systemd_manager import (
     install_units,
@@ -226,6 +226,17 @@ def cmd_setup() -> None:
 
     logger.info("Selected regions for setup: %s", selected_ids)
 
+    # Initialize NMClient singleton
+    try:
+        log_operation_start("initialize NMClient")
+        nm_client = NMClient()
+        log_operation_success("initialize NMClient")
+    except Exception as e:
+        print(f"✗ Failed to initialize NetworkManager D-Bus client: {e}")
+        log_operation_failure("initialize NMClient", e)
+        print_error("dbus_unavailable")
+        return
+
     # 6. Create profiles for each region
     print("\nCreating profiles...")
     successful_regions: List[str] = []
@@ -284,29 +295,50 @@ def cmd_setup() -> None:
             log_api_operation("register_key", region_id)
             conn_details = api.register_key(token, public_key, server_hostname, server_ip)
 
-            # Create NetworkManager profile
+            # Create NetworkManager profile using D-Bus
             region_name = region_data.get("name", region_id)
             profile_name = format_profile_name(region_name)
-            log_nm_operation("create_profile", profile_name)
-            success = create_profile(
-                profile_name,
-                {
-                    "private_key": private_key,
-                    "server_pubkey": conn_details["server_key"],
-                    "endpoint": f"{conn_details['server_ip']}:{conn_details['server_port']}",
-                    "peer_ip": conn_details["peer_ip"],
-                    "dns_servers": conn_details["dns_servers"],
-                },
+            
+            # Generate interface name (max 15 chars)
+            interface_name = f"wg-pia-{region_id}"
+            if len(interface_name) > 15:
+                # Truncate if too long
+                interface_name = interface_name[:15]
+            
+            log_nm_operation("create_connection via D-Bus", profile_name)
+            
+            # Create WireGuard connection configuration
+            wg_config = WireGuardConfig(
+                connection_name=profile_name,
+                interface_name=interface_name,
+                private_key=private_key,
+                server_pubkey=conn_details["server_key"],
+                server_endpoint=f"{conn_details['server_ip']}:{conn_details['server_port']}",
+                peer_ip=conn_details["peer_ip"],
+                dns_servers=conn_details["dns_servers"],
             )
-
-            if success:
+            
+            # Create the connection object
+            connection = create_wireguard_connection(wg_config)
+            
+            # Add connection to NetworkManager via D-Bus
+            future = nm_client.add_connection_async(connection)
+            
+            # Wait for the operation to complete (with timeout)
+            try:
+                remote_connection = future.result(timeout=10)
                 print("✓")
                 successful_regions.append(region_id)
                 log_operation_success(f"setup region {region_id}")
-            else:
-                print("✗")
+            except TimeoutError:
+                print("✗ (timeout)")
                 log_operation_failure(
-                    f"setup region {region_id}", Exception("profile creation failed")
+                    f"setup region {region_id}", Exception("D-Bus operation timed out")
+                )
+            except Exception as conn_exc:
+                print(f"✗ ({conn_exc})")
+                log_operation_failure(
+                    f"setup region {region_id}", conn_exc
                 )
 
         except Exception as e:
@@ -483,10 +515,23 @@ def cmd_refresh(region: Optional[str] = None) -> None:
         log_operation_failure("fetch regions", e)
         sys.exit(1)
 
+    # Initialize NMClient singleton
+    try:
+        log_operation_start("initialize NMClient")
+        nm_client = NMClient()
+        log_operation_success("initialize NMClient")
+    except Exception as e:
+        print(f"✗ Failed to initialize NetworkManager D-Bus client: {e}")
+        log_operation_failure("initialize NMClient", e)
+        print_error("dbus_unavailable")
+        sys.exit(1)
+
     # Refresh each region
     print("\nRefreshing tokens...")
     successful = 0
     failed = 0
+    live_updated = 0
+    saved_updated = 0
 
     for region_id in regions_to_refresh:
         try:
@@ -549,36 +594,70 @@ def cmd_refresh(region: Optional[str] = None) -> None:
             log_api_operation("register_key", region_id)
             conn_details = api.register_key(token, public_key, server_hostname, server_ip)
 
-            # Update profile
+            # Get connection by name
             region_name = region_data.get("name", region_id)
             profile_name = format_profile_name(region_name)
-            was_active = is_active(profile_name)
-
-            log_nm_operation("update_profile", profile_name)
-            success = update_profile(
-                profile_name,
-                {
-                    "private_key": private_key,
-                    "server_pubkey": conn_details["server_key"],
-                    "endpoint": f"{conn_details['server_ip']}:{conn_details['server_port']}",
-                    "peer_ip": conn_details["peer_ip"],
-                    "dns_servers": conn_details["dns_servers"],
-                },
-            )
-
-            if success:
-                print("✓")
-                if was_active:
-                    log_operation_success(f"refresh region {region_id}", "connection was active")
-                else:
-                    log_operation_success(f"refresh region {region_id}")
-                successful += 1
-            else:
-                print("✗")
+            
+            log_nm_operation("get_connection_by_id", profile_name)
+            connection = nm_client.get_connection_by_id(profile_name)
+            
+            if not connection:
+                print("✗ (connection not found)")
                 log_operation_failure(
-                    f"refresh region {region_id}", Exception("profile update failed")
+                    f"refresh region {region_id}", Exception("connection not found in NetworkManager")
                 )
                 failed += 1
+                continue
+
+            # Check if connection is active
+            is_active = is_connection_active(nm_client, profile_name)
+            
+            # Prepare new endpoint
+            server_endpoint = f"{conn_details['server_ip']}:{conn_details['server_port']}"
+            
+            # Use appropriate refresh method based on connection state
+            if is_active:
+                # Use live refresh (Reapply) for active connections
+                log_nm_operation("refresh_active_connection", profile_name)
+                success = refresh_active_connection(
+                    nm_client,
+                    connection,
+                    private_key,
+                    server_endpoint
+                )
+                
+                if success:
+                    print("✓ (live)")
+                    live_updated += 1
+                    successful += 1
+                    log_operation_success(f"refresh region {region_id}", "updated live")
+                else:
+                    print("✗ (live refresh failed)")
+                    log_operation_failure(
+                        f"refresh region {region_id}", Exception("live refresh failed")
+                    )
+                    failed += 1
+            else:
+                # Update saved profile for inactive connections
+                log_nm_operation("refresh_inactive_connection", profile_name)
+                success = refresh_inactive_connection(
+                    nm_client,
+                    connection,
+                    private_key,
+                    server_endpoint
+                )
+                
+                if success:
+                    print("✓ (saved)")
+                    saved_updated += 1
+                    successful += 1
+                    log_operation_success(f"refresh region {region_id}", "updated saved profile")
+                else:
+                    print("✗ (saved update failed)")
+                    log_operation_failure(
+                        f"refresh region {region_id}", Exception("saved profile update failed")
+                    )
+                    failed += 1
 
         except Exception as e:
             print(f"✗ ({e})")
@@ -595,7 +674,11 @@ def cmd_refresh(region: Optional[str] = None) -> None:
 
     # Summary
     print(f"\n✓ Refresh complete: {successful} successful, {failed} failed")
-    log_operation_success("refresh command", f"successful={successful}, failed={failed}")
+    if live_updated > 0:
+        print(f"  • {live_updated} connection(s) updated live (no disconnection)")
+    if saved_updated > 0:
+        print(f"  • {saved_updated} saved profile(s) updated (will use on next activation)")
+    log_operation_success("refresh command", f"successful={successful}, failed={failed}, live={live_updated}, saved={saved_updated}")
     if failed > 0:
         sys.exit(1)
 
@@ -646,6 +729,17 @@ def cmd_add_region(region_id: str) -> None:
         print_error("auth_invalid_credentials")
         sys.exit(1)
 
+    # Initialize NMClient singleton
+    try:
+        log_operation_start("initialize NMClient")
+        nm_client = NMClient()
+        log_operation_success("initialize NMClient")
+    except Exception as e:
+        print(f"✗ Failed to initialize NetworkManager D-Bus client: {e}")
+        log_operation_failure("initialize NMClient", e)
+        print_error("dbus_unavailable")
+        sys.exit(1)
+
     # Generate keypair
     try:
         print(f"Setting up {region_id}...", end=" ", flush=True)
@@ -658,10 +752,43 @@ def cmd_add_region(region_id: str) -> None:
         log_operation_failure("generate keypair", e)
         sys.exit(1)
 
+    # Get region data for server info
+    try:
+        region_data = None
+        for r in regions:
+            if r["id"] == region_id:
+                region_data = r
+                break
+        
+        if not region_data:
+            print("✗ (region data not found)")
+            log_operation_failure("get region data", Exception("region not found"))
+            sys.exit(1)
+        
+        # Get WireGuard server info
+        wg_servers = region_data.get("servers", {}).get("wg", [])
+        if not wg_servers:
+            print("✗ (no WG servers)")
+            log_operation_failure("get server info", Exception("No WireGuard servers available"))
+            sys.exit(1)
+        
+        server_info = wg_servers[0]
+        server_hostname = server_info.get("cn")
+        server_ip = server_info.get("ip")
+        
+        if not server_hostname or not server_ip:
+            print("✗ (invalid server info)")
+            log_operation_failure("get server info", Exception("Invalid server information"))
+            sys.exit(1)
+    except Exception as e:
+        print(f"✗ ({e})")
+        log_operation_failure("get region data", e)
+        sys.exit(1)
+
     # Register key
     try:
         log_api_operation("register_key", region_id)
-        conn_details = api.register_key(token, public_key, region_id)
+        conn_details = api.register_key(token, public_key, server_hostname, server_ip)
         log_operation_success("register key", region_id)
     except Exception as e:
         print(f"✗ ({e})")
@@ -669,29 +796,51 @@ def cmd_add_region(region_id: str) -> None:
         print_error("key_registration_failed")
         sys.exit(1)
 
-    # Create profile
+    # Create profile using D-Bus
     try:
-        profile_name = format_profile_name(region_id)
-        log_nm_operation("create_profile", profile_name)
-        success = create_profile(
-            profile_name,
-            {
-                "private_key": private_key,
-                "server_pubkey": conn_details["server_key"],
-                "endpoint": f"{conn_details['server_ip']}:{conn_details['server_port']}",
-                "peer_ip": conn_details["peer_ip"],
-                "dns_servers": conn_details["dns_servers"],
-            },
+        region_name = region_data.get("name", region_id)
+        profile_name = format_profile_name(region_name)
+        
+        # Generate interface name (max 15 chars)
+        interface_name = f"wg-pia-{region_id}"
+        if len(interface_name) > 15:
+            # Truncate if too long
+            interface_name = interface_name[:15]
+        
+        log_nm_operation("create_connection via D-Bus", profile_name)
+        
+        # Create WireGuard connection configuration
+        wg_config = WireGuardConfig(
+            connection_name=profile_name,
+            interface_name=interface_name,
+            private_key=private_key,
+            server_pubkey=conn_details["server_key"],
+            server_endpoint=f"{conn_details['server_ip']}:{conn_details['server_port']}",
+            peer_ip=conn_details["peer_ip"],
+            dns_servers=conn_details["dns_servers"],
         )
-
-        if not success:
-            print("✗")
-            log_operation_failure("create profile", Exception("profile creation failed"))
+        
+        # Create the connection object
+        connection = create_wireguard_connection(wg_config)
+        
+        # Add connection to NetworkManager via D-Bus
+        future = nm_client.add_connection_async(connection)
+        
+        # Wait for the operation to complete (with timeout)
+        try:
+            remote_connection = future.result(timeout=10)
+            print("✓")
+            log_operation_success(f"create profile for {region_id}")
+        except TimeoutError:
+            print("✗ (timeout)")
+            log_operation_failure("create profile", Exception("D-Bus operation timed out"))
             print_error("nm_operation_failed")
             sys.exit(1)
-
-        print("✓")
-        log_operation_success(f"create profile for {region_id}")
+        except Exception as conn_exc:
+            print(f"✗ ({conn_exc})")
+            log_operation_failure("create profile", conn_exc)
+            print_error("nm_operation_failed")
+            sys.exit(1)
     except Exception as e:
         print(f"✗ ({e})")
         log_operation_failure("create profile", e)
@@ -737,13 +886,65 @@ def cmd_remove_region(region_id: str) -> None:
         logger.warning("Region not configured: %s", region_id)
         return
 
-    # Delete profile
+    # Initialize NMClient singleton
     try:
-        profile_name = format_profile_name(region_id)
-        log_nm_operation("delete_profile", profile_name)
-        success = delete_profile(profile_name)
-        if success:
-            log_operation_success(f"delete profile for {region_id}")
+        log_operation_start("initialize NMClient")
+        nm_client = NMClient()
+        log_operation_success("initialize NMClient")
+    except Exception as e:
+        print(f"✗ Failed to initialize NetworkManager D-Bus client: {e}")
+        log_operation_failure("initialize NMClient", e)
+        print_error("dbus_unavailable")
+        sys.exit(1)
+
+    # Delete profile using D-Bus
+    try:
+        # Get region data to format profile name correctly
+        try:
+            api = PIAClient()
+            regions = api.get_regions()
+            region_data = None
+            for r in regions:
+                if r["id"] == region_id:
+                    region_data = r
+                    break
+            
+            if region_data:
+                region_name = region_data.get("name", region_id)
+                profile_name = format_profile_name(region_name)
+            else:
+                # Fallback to using region_id if we can't get region data
+                profile_name = format_profile_name(region_id)
+        except Exception:
+            # Fallback to using region_id if API call fails
+            profile_name = format_profile_name(region_id)
+        
+        log_nm_operation("delete_connection via D-Bus", profile_name)
+        
+        # Get the connection
+        connection = nm_client.get_connection_by_id(profile_name)
+        
+        if not connection:
+            print(f"⚠ Warning: Connection '{profile_name}' not found in NetworkManager")
+            logger.warning("Connection not found: %s", profile_name)
+        else:
+            # Remove the connection
+            future = nm_client.remove_connection_async(connection)
+            
+            # Wait for the operation to complete (with timeout)
+            try:
+                future.result(timeout=10)
+                log_operation_success(f"delete profile for {region_id}")
+            except TimeoutError:
+                print(f"✗ Failed to delete profile: timeout")
+                log_operation_failure("delete profile", Exception("D-Bus operation timed out"))
+                print_error("nm_operation_failed")
+                sys.exit(1)
+            except Exception as conn_exc:
+                print(f"✗ Failed to delete profile: {conn_exc}")
+                log_operation_failure("delete profile", conn_exc)
+                print_error("nm_operation_failed")
+                sys.exit(1)
     except Exception as e:
         print(f"✗ Failed to delete profile: {e}")
         log_operation_failure("delete profile", e)
@@ -793,6 +994,26 @@ def cmd_status() -> None:
     regions = config.get("regions", [])
     last_refresh = config.get("metadata", {}).get("last_refresh")
 
+    # Initialize NMClient singleton
+    try:
+        log_operation_start("initialize NMClient")
+        nm_client = NMClient()
+        log_operation_success("initialize NMClient")
+    except Exception as e:
+        print(f"✗ Failed to initialize NetworkManager D-Bus client: {e}")
+        log_operation_failure("initialize NMClient", e)
+        print_error("dbus_unavailable")
+        sys.exit(1)
+
+    # Get region data for proper profile names
+    try:
+        api = PIAClient()
+        region_list = api.get_regions()
+        region_map = {r["id"]: r.get("name", r["id"]) for r in region_list}
+    except Exception as e:
+        logger.warning("Failed to fetch region data: %s", e)
+        region_map = {}
+
     print("\n" + "=" * 50)
     print("PIA NetworkManager Status")
     print("=" * 50)
@@ -800,9 +1021,18 @@ def cmd_status() -> None:
     print(f"\nConfigured regions ({len(regions)}):")
     if regions:
         for region_id in regions:
-            profile_name = format_profile_name(region_id)
-            exists = profile_exists(profile_name)
-            active = is_active(profile_name) if exists else False
+            # Get proper region name for profile lookup
+            region_name = region_map.get(region_id, region_id)
+            profile_name = format_profile_name(region_name)
+            
+            # Check if connection exists using D-Bus
+            connection = nm_client.get_connection_by_id(profile_name)
+            exists = connection is not None
+            
+            # Check if connection is active using D-Bus
+            active = False
+            if exists:
+                active = is_connection_active(nm_client, profile_name)
 
             status = "✓ Active" if active else ("✓ Exists" if exists else "✗ Missing")
             print(f"  • {region_id:<20} {status}")
