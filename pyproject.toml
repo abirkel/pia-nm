@@ -32,6 +32,7 @@ dependencies = [
     "requests>=2.31.0",
     "keyring>=24.0.0",
     "PyYAML>=6.0",
+    "PyGObject>=3.42.0",
 ]
 
 [project.optional-dependencies]
