@@ -151,12 +151,6 @@ def cmd_setup() -> None:
     logger = logging.getLogger(__name__)
     log_operation_start("setup command")
 
-    # Check if running as root (needed for NetworkManager connection file access)
-    if os.geteuid() != 0:
-        print("\n⚠ Warning: This command requires root privileges to configure NetworkManager.")
-        print("Please run: sudo pia-nm setup\n")
-        sys.exit(1)
-
     print("\n" + "=" * 50)
     print("PIA NetworkManager Setup")
     print("=" * 50)

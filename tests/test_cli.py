@@ -226,7 +226,6 @@ class TestCmdSetup:
     @patch("pia_nm.cli.create_wireguard_connection")
     @patch("pia_nm.cli.format_profile_name")
     @patch("pia_nm.cli.check_system_dependencies")
-    @patch("os.geteuid")
     @patch("builtins.input")
     @patch("getpass.getpass")
     @patch("builtins.print")
@@ -235,7 +234,6 @@ class TestCmdSetup:
         mock_print,
         mock_getpass,
         mock_input,
-        mock_geteuid,
         mock_check_deps,
         mock_format_name,
         mock_create_wg_conn,
@@ -248,9 +246,6 @@ class TestCmdSetup:
         """Test that cmd_setup creates connections via D-Bus."""
         from pia_nm.cli import cmd_setup
         from concurrent.futures import Future
-
-        # Mock running as root
-        mock_geteuid.return_value = 0
 
         # Mock system dependencies check
         mock_check_deps.return_value = True
