@@ -39,7 +39,7 @@ VALID_WG_KEYS = [
 # Property Tests
 
 
-@pytest.mark.skip(reason="Requires running NetworkManager daemon with D-Bus connection")
+@pytest.mark.skip(reason="Cannot mock PyGObject classes due to metaclass conflicts")
 def test_property_5_wireguard_connection_structure():
     """
     **Feature: dbus-refactor, Property 5: WireGuard Connection Structure**
@@ -125,7 +125,7 @@ def test_property_5_wireguard_connection_structure():
     assert peer.is_sealed(), "Peer should be sealed (immutable)"
 
 
-@pytest.mark.skip(reason="Requires running NetworkManager daemon with D-Bus connection")
+@pytest.mark.skip(reason="Cannot mock PyGObject classes due to metaclass conflicts")
 def test_property_6_default_route_via_allowed_ips():
     """
     **Feature: dbus-refactor, Property 6: Default Route via Allowed-IPs**
@@ -171,7 +171,7 @@ def test_property_6_default_route_via_allowed_ips():
     ), f"Peer allowed-ips should contain default route 0.0.0.0/0, got: {allowed_ip}"
 
 
-@pytest.mark.skip(reason="Requires running NetworkManager daemon with D-Bus connection")
+@pytest.mark.skip(reason="Cannot mock PyGObject classes due to metaclass conflicts")
 def test_property_7_dns_configuration():
     """
     **Feature: dbus-refactor, Property 7: DNS Configuration**
@@ -228,7 +228,7 @@ def test_property_7_dns_configuration():
     assert has_tilde, "DNS search should contain '~' to route all DNS through VPN"
 
 
-@pytest.mark.skip(reason="Requires running NetworkManager daemon with D-Bus connection")
+@pytest.mark.skip(reason="Cannot mock PyGObject classes due to metaclass conflicts")
 def test_property_10_peer_immutability():
     """
     **Feature: dbus-refactor, Property 10: Peer Immutability**
