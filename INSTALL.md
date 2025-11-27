@@ -10,12 +10,14 @@ Verify system packages are installed (usually pre-installed on Aurora/Bluefin):
 
 ```bash
 # Check if packages are installed
-rpm -q wireguard-tools NetworkManager
+rpm -q wireguard-tools NetworkManager python3-gobject
 
 # If missing, install them
-sudo rpm-ostree install wireguard-tools NetworkManager
+sudo rpm-ostree install wireguard-tools NetworkManager python3-gobject
 sudo systemctl reboot
 ```
+
+**Note**: PyGObject (python3-gobject) is required for D-Bus communication with NetworkManager. This is typically pre-installed on Fedora-based systems.
 
 ### Installation Steps
 
@@ -75,16 +77,38 @@ sudo mv pia-nm /usr/local/bin/
 ### Option 2: pip
 
 ```bash
-# Install system dependencies
-sudo dnf install wireguard-tools NetworkManager python3-pip
+# Install system dependencies (Debian/Ubuntu)
+sudo apt install python3-gi gir1.2-nm-1.0 wireguard-tools network-manager python3-pip
+
+# Or on Fedora/RHEL
+sudo dnf install python3-gobject NetworkManager wireguard-tools python3-pip
 
 # Install from GitHub
 pip install --user git+https://github.com/abirkel/pia-nm.git
 ```
 
+**Important**: PyGObject must be installed via system package manager (apt/dnf), not pip, as it requires system libraries.
+
+## Verify D-Bus Setup
+
+Before running the setup wizard, verify that all D-Bus dependencies are correctly installed:
+
+```bash
+python3 pia_nm/verify_dbus_setup.py
+```
+
+This script checks:
+- Python version (>= 3.9)
+- PyGObject installation
+- NetworkManager GObject introspection (gir1.2-nm-1.0)
+- NetworkManager version (>= 1.16 for WireGuard support)
+- NM.Client creation
+
+If any checks fail, install the missing dependencies as shown in the error messages.
+
 ## Initial Setup
 
-After installation, run the setup wizard:
+After installation and verification, run the setup wizard:
 
 ```bash
 pia-nm setup

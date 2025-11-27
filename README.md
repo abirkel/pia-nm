@@ -21,17 +21,34 @@ Whether you can't use the official PIA client, prefer native Linux integration, 
 
 - **OS**: Any Linux distribution with NetworkManager and systemd
 - **Python**: 3.9 or later
-- **NetworkManager**: With WireGuard support
+- **NetworkManager**: 1.16 or later (for WireGuard support)
+- **PyGObject**: 3.42.0 or later (Python GObject introspection bindings)
 - **wireguard-tools**: For WireGuard key generation
 - **Active PIA subscription**: Valid username and password
 
 ### Install System Dependencies
 
-On Fedora-based systems:
+On Debian/Ubuntu:
 
 ```bash
-sudo dnf install NetworkManager wireguard-tools systemd
+sudo apt install python3-gi gir1.2-nm-1.0 network-manager wireguard-tools
 ```
+
+On Fedora-based systems (Aurora, Bluefin, Silverblue):
+
+```bash
+sudo dnf install python3-gobject NetworkManager wireguard-tools systemd
+```
+
+### Verify Setup
+
+After installing dependencies, verify your system is ready:
+
+```bash
+python3 pia_nm/verify_dbus_setup.py
+```
+
+This will check that all required components are installed and working correctly.
 
 ## Installation
 
