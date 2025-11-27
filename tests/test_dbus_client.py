@@ -15,12 +15,12 @@ from unittest.mock import Mock, MagicMock, patch
 
 import pytest
 
-# Mock PyGObject modules before importing dbus_client
-sys.modules["gi"] = MagicMock()
-sys.modules["gi.repository"] = MagicMock()
-sys.modules["gi.repository.NM"] = MagicMock()
-sys.modules["gi.repository.GLib"] = MagicMock()
+# Import the real NM and GLib modules first
+import gi
+gi.require_version("NM", "1.0")
+from gi.repository import NM, GLib
 
+# Now we can import dbus_client which uses the real modules
 from pia_nm.dbus_client import NMClient
 
 

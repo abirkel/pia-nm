@@ -82,10 +82,22 @@ def format_profile_name(region_name: str) -> str:
     """Format region name into profile name.
     
     NetworkManager connection names are limited to 32 characters.
+    Converts 'us-east' to 'PIA-US-East' format.
+    Country codes are uppercase, city names are title case.
     """
-    # Remove special characters and truncate if needed
-    # PIA- prefix (4 chars) + region name (max 28 chars)
-    clean_name = region_name.replace(" ", "-")
+    # Convert to proper case: us-east -> US-East
+    parts = region_name.split("-")
+    formatted_parts = []
+    for i, part in enumerate(parts):
+        if i == 0:
+            # First part (country code) is uppercase
+            formatted_parts.append(part.upper())
+        else:
+            # Other parts (city names) are title case
+            formatted_parts.append(part.capitalize())
+    clean_name = "-".join(formatted_parts)
+    
+    # Truncate if needed (PIA- prefix is 4 chars, max 28 chars for region)
     if len(clean_name) > 28:
         clean_name = clean_name[:28]
     return f"PIA-{clean_name}"

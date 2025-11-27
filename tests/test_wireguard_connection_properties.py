@@ -45,6 +45,9 @@ def test_property_5_wireguard_connection_structure():
     Property: For any WireGuardConfig, the created connection should be an
     NM.SimpleConnection with WireGuard settings containing all required fields
     (private key, peer with public key, endpoint, allowed-ips, keepalive).
+    
+    NOTE: This test requires a running NetworkManager daemon with D-Bus connection.
+    It is skipped in test environments without NetworkManager.
     """
     # Test with multiple configurations
     test_configs = [

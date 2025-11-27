@@ -35,7 +35,7 @@ from typing import List
 import gi
 gi.require_version("NM", "1.0")  # noqa: required before importing NM module
 # pylint: disable=wrong-import-position
-from gi.repository import NM
+from gi.repository import NM, GObject  # noqa: GObject must be imported for NM to work
 
 logger = logging.getLogger(__name__)
 
