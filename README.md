@@ -188,9 +188,7 @@ Having issues? Check [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for detailed solut
 - WireGuard keys stored with restrictive permissions (0600)
 - No credentials or tokens logged
 
-## FAQ
 
-See [FAQ.md](FAQ.md) for answers to common questions about setup, usage, security, and compatibility.
 
 ## Contributing
 
@@ -198,11 +196,15 @@ Interested in contributing? See [CONTRIBUTING.md](CONTRIBUTING.md) for developme
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU General Public License v3.0 or later (GPLv3+).
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+See the [LICENSE](LICENSE) file for full license text.
 
 ## Attribution
 
-This project adapts D-Bus integration patterns from [ProtonVPN's python-proton-vpn-network-manager](https://github.com/ProtonVPN/python-proton-vpn-network-manager) library. ProtonVPN's mature, production-tested D-Bus implementation provided the foundation for pia-nm's NetworkManager integration. See [ATTRIBUTION.md](ATTRIBUTION.md) for detailed attribution and license information.
+This project adapts D-Bus integration patterns from ProtonVPN's [python-proton-vpn-network-manager](https://github.com/ProtonVPN/python-proton-vpn-network-manager) (GPLv3). See [ATTRIBUTION.md](ATTRIBUTION.md) for details.
 
 ## References
 
