@@ -285,6 +285,8 @@ def _create_wireguard_peer(config: WireGuardConfig) -> NM.WireGuardPeer:
     peer = NM.WireGuardPeer.new()
     
     # Set server public key
+    # The second parameter is "allow_invalid" - False means validate the key format
+    # Note: The key must be a valid base64-encoded Curve25519 public key (44 chars)
     peer.set_public_key(config.server_pubkey, False)
     
     # Set server endpoint (ip:port)
@@ -294,8 +296,9 @@ def _create_wireguard_peer(config: WireGuardConfig) -> NM.WireGuardPeer:
     peer.append_allowed_ip(config.allowed_ips, False)
     logger.debug("Set allowed-ips: %s", config.allowed_ips)
     
-    # Set persistent keepalive
-    peer.set_persistent_keepalive(config.persistent_keepalive)
+    # Set persistent keepalive (if non-zero)
+    if config.persistent_keepalive > 0:
+        peer.set_persistent_keepalive(config.persistent_keepalive)
     
     # Seal the peer to make it immutable
     # After sealing, the peer cannot be modified (except ref/unref)
@@ -305,6 +308,7 @@ def _create_wireguard_peer(config: WireGuardConfig) -> NM.WireGuardPeer:
     
     # Validate the peer configuration
     # This ensures all required fields are set correctly
+    # Parameters: (check_interface, check_property) - both True for strict validation
     try:
         is_valid = peer.is_valid(True, True)
         if not is_valid:
