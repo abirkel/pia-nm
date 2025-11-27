@@ -1,4 +1,4 @@
-.PHONY: help pex install-pex clean test lint format
+.PHONY: help pex install-pex clean test lint format delete-release
 
 help:
 	@echo "Available targets:"
@@ -45,3 +45,6 @@ lint:
 
 format:
 	python3 -m black pia_nm/ tests/
+
+delete-release:
+	git tag -d v-test; git push origin :v-test; git tag v-test; git push origin v-test
