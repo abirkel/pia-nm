@@ -11,10 +11,11 @@ Whether you can't use the official PIA client, prefer native Linux integration, 
 ## Features
 
 - **Automated Token Refresh**: Tokens refresh automatically every 12 hours via systemd timer
+- **Zero-Downtime Refresh**: Live token updates using NetworkManager's Reapply method - active VPNs never disconnect
 - **Multiple Region Profiles**: Configure and manage multiple PIA regions simultaneously
-- **Active Connection Preservation**: Token refresh happens without disconnecting active VPNs
+- **D-Bus Integration**: Direct NetworkManager D-Bus API access via PyGObject for reliable, type-safe operations
 - **Secure Credential Storage**: Credentials stored in system keyring, never in plaintext
-- **NetworkManager Integration**: VPN profiles appear in NetworkManager GUI
+- **NetworkManager Integration**: VPN profiles appear in NetworkManager GUI with full WireGuard configuration
 - **Easy Setup**: Interactive setup wizard guides initial configuration
 
 ## Requirements
@@ -22,7 +23,8 @@ Whether you can't use the official PIA client, prefer native Linux integration, 
 - **OS**: Any Linux distribution with NetworkManager and systemd
 - **Python**: 3.9 or later
 - **NetworkManager**: 1.16 or later (for WireGuard support)
-- **PyGObject**: 3.42.0 or later (Python GObject introspection bindings)
+- **PyGObject**: 3.42.0 or later (Python GObject introspection bindings for D-Bus access)
+- **GObject Introspection**: gir1.2-nm-1.0 (NetworkManager GObject introspection data)
 - **wireguard-tools**: For WireGuard key generation
 - **Active PIA subscription**: Valid username and password
 
@@ -39,6 +41,8 @@ On Fedora-based systems (Aurora, Bluefin, Silverblue):
 ```bash
 sudo dnf install python3-gobject NetworkManager wireguard-tools systemd
 ```
+
+**Note**: PyGObject and gir1.2-nm-1.0 are required for D-Bus communication with NetworkManager. These must be installed via your system package manager (not pip) as they require system libraries.
 
 ### Verify Setup
 
@@ -153,11 +157,12 @@ metadata:
 
 ## Automatic Token Refresh
 
-The systemd timer automatically refreshes tokens every 12 hours:
+The systemd timer automatically refreshes tokens every 12 hours using NetworkManager's D-Bus API:
 
 - **First refresh**: 5 minutes after system boot
 - **Subsequent refreshes**: Every 12 hours
-- **Active connections**: Preserved during refresh (no disconnection)
+- **Active connections**: Preserved during refresh using Reapply method (zero downtime)
+- **Inactive connections**: Saved profiles updated for next activation
 
 Check timer status:
 
@@ -195,12 +200,18 @@ Interested in contributing? See [CONTRIBUTING.md](CONTRIBUTING.md) for developme
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## Attribution
+
+This project adapts D-Bus integration patterns from [ProtonVPN's python-proton-vpn-network-manager](https://github.com/ProtonVPN/python-proton-vpn-network-manager) library. ProtonVPN's mature, production-tested D-Bus implementation provided the foundation for pia-nm's NetworkManager integration. See [ATTRIBUTION.md](ATTRIBUTION.md) for detailed attribution and license information.
+
 ## References
 
 - [PIA Manual Connections](https://github.com/pia-foss/manual-connections)
 - [NetworkManager Documentation](https://networkmanager.dev/)
+- [PyGObject Documentation](https://pygobject.readthedocs.io/)
 - [WireGuard Protocol](https://www.wireguard.com/)
 - [Systemd Timers](https://www.freedesktop.org/software/systemd/man/systemd.timer.html)
+- [ProtonVPN NetworkManager Integration](https://github.com/ProtonVPN/python-proton-vpn-network-manager)
 
 ## Support
 

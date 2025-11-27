@@ -17,7 +17,9 @@ sudo rpm-ostree install wireguard-tools NetworkManager python3-gobject
 sudo systemctl reboot
 ```
 
-**Note**: PyGObject (python3-gobject) is required for D-Bus communication with NetworkManager. This is typically pre-installed on Fedora-based systems.
+**Important**: PyGObject (python3-gobject) is required for D-Bus communication with NetworkManager. This package provides Python bindings for GObject introspection, which pia-nm uses to interact with NetworkManager's D-Bus API. This is typically pre-installed on Fedora-based systems.
+
+**Note**: The GObject introspection data for NetworkManager (gir1.2-nm-1.0 on Debian/Ubuntu) is usually included with the NetworkManager package on Fedora systems.
 
 ### Installation Steps
 
@@ -87,7 +89,17 @@ sudo dnf install python3-gobject NetworkManager wireguard-tools python3-pip
 pip install --user git+https://github.com/abirkel/pia-nm.git
 ```
 
-**Important**: PyGObject must be installed via system package manager (apt/dnf), not pip, as it requires system libraries.
+**Important**: PyGObject and GObject introspection data must be installed via system package manager (apt/dnf), not pip, as they require system libraries and introspection data files.
+
+#### Understanding the Dependencies
+
+- **python3-gi / python3-gobject**: Python bindings for GObject introspection (PyGObject)
+- **gir1.2-nm-1.0** (Debian/Ubuntu): GObject introspection data for NetworkManager 1.0 API
+  - On Fedora, this is typically included with the NetworkManager package
+- **NetworkManager**: The network management daemon (>= 1.16 for WireGuard support)
+- **wireguard-tools**: Provides the `wg` command for key generation
+
+These dependencies enable pia-nm to communicate with NetworkManager via D-Bus using type-safe Python objects.
 
 ## Verify D-Bus Setup
 
@@ -99,12 +111,42 @@ python3 pia_nm/verify_dbus_setup.py
 
 This script checks:
 - Python version (>= 3.9)
-- PyGObject installation
-- NetworkManager GObject introspection (gir1.2-nm-1.0)
+- PyGObject installation and version (>= 3.42.0)
+- NetworkManager GObject introspection data (gir1.2-nm-1.0 or equivalent)
 - NetworkManager version (>= 1.16 for WireGuard support)
-- NM.Client creation
+- NM.Client creation via D-Bus
+- GLib MainLoop functionality
 
 If any checks fail, install the missing dependencies as shown in the error messages.
+
+### Common D-Bus Setup Issues
+
+**"No module named 'gi'"**
+```bash
+# Debian/Ubuntu
+sudo apt install python3-gi
+
+# Fedora/RHEL
+sudo dnf install python3-gobject
+```
+
+**"Namespace 'NM' not available"**
+```bash
+# Debian/Ubuntu
+sudo apt install gir1.2-nm-1.0
+
+# Fedora (usually included with NetworkManager)
+sudo dnf install NetworkManager
+```
+
+**"NetworkManager version too old"**
+```bash
+# Check your version
+nmcli --version
+
+# WireGuard support requires NetworkManager >= 1.16
+# Upgrade NetworkManager if needed
+```
 
 ## Initial Setup
 

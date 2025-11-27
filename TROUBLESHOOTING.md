@@ -34,15 +34,16 @@ Solutions to common issues and problems with pia-nm.
    tail -f ~/.local/share/pia-nm/logs/pia-nm.log
    ```
 
-## NetworkManager Errors
+## D-Bus and NetworkManager Errors
 
-**Error:** `✗ NetworkManager error: Failed to update connection`
+### NetworkManager Not Running
+
+**Error:** `✗ D-Bus error: NetworkManager not available` or `✗ Failed to create NM.Client`
 
 **Causes:**
-- NetworkManager not running
-- Corrupted connection profile
-- Permission issues
-- Conflicting network configuration
+- NetworkManager service not running
+- D-Bus service not running
+- NetworkManager not installed
 
 **Solution:**
 
@@ -53,25 +54,215 @@ Solutions to common issues and problems with pia-nm.
 
 2. If not running, start it:
    ```bash
-   systemctl start NetworkManager
+   sudo systemctl start NetworkManager
+   sudo systemctl enable NetworkManager
    ```
 
-3. Check for corrupted profiles:
+3. Verify D-Bus is running:
+   ```bash
+   systemctl status dbus
+   ```
+
+4. Check NetworkManager version (need >= 1.16):
+   ```bash
+   nmcli --version
+   ```
+
+5. Test D-Bus connection manually:
+   ```bash
+   python3 -c "from gi.repository import NM; client = NM.Client.new(None); print('D-Bus OK')"
+   ```
+
+### NetworkManager Connection Errors
+
+**Error:** `✗ NetworkManager error: Failed to update connection`
+
+**Causes:**
+- Corrupted connection profile
+- Permission issues
+- D-Bus communication failure
+- Conflicting network configuration
+
+**Solution:**
+
+1. Check for corrupted profiles:
    ```bash
    nmcli connection show | grep PIA
    ```
 
-4. If a profile is corrupted, remove and recreate it:
+2. If a profile is corrupted, remove and recreate it:
    ```bash
    pia-nm remove-region <region-id>
    pia-nm add-region <region-id>
    ```
 
-5. Check file permissions:
+3. Check file permissions:
    ```bash
    ls -la ~/.config/pia-nm/
    ```
    Should show `drwx------` (0700) for the directory.
+
+4. View NetworkManager logs:
+   ```bash
+   journalctl -u NetworkManager -n 50
+   ```
+
+## PyGObject Import Errors
+
+### "No module named 'gi'"
+
+**Error:** `ModuleNotFoundError: No module named 'gi'`
+
+**Cause:** PyGObject not installed
+
+**Solution:**
+
+1. Install PyGObject via system package manager:
+   ```bash
+   # Debian/Ubuntu
+   sudo apt install python3-gi
+   
+   # Fedora/RHEL
+   sudo dnf install python3-gobject
+   ```
+
+2. Verify installation:
+   ```bash
+   python3 -c "import gi; print(gi.__version__)"
+   ```
+
+3. **Important**: Do NOT install PyGObject via pip. It requires system libraries that must be installed via your package manager.
+
+### "Namespace 'NM' not available"
+
+**Error:** `ValueError: Namespace NM not available` or `gi.repository.GLib.Error: Typelib file for namespace 'NM', version '1.0' not found`
+
+**Cause:** NetworkManager GObject introspection data not installed
+
+**Solution:**
+
+1. Install GObject introspection data:
+   ```bash
+   # Debian/Ubuntu
+   sudo apt install gir1.2-nm-1.0
+   
+   # Fedora (usually included with NetworkManager)
+   sudo dnf install NetworkManager
+   ```
+
+2. Verify installation:
+   ```bash
+   python3 -c "from gi.repository import NM; print('NM namespace OK')"
+   ```
+
+3. Check available introspection files:
+   ```bash
+   # Debian/Ubuntu
+   ls /usr/lib/*/girepository-1.0/NM-*.typelib
+   
+   # Fedora
+   ls /usr/lib64/girepository-1.0/NM-*.typelib
+   ```
+
+### "PyGObject version too old"
+
+**Error:** `ImportError: PyGObject version 3.42.0 or later required`
+
+**Cause:** Outdated PyGObject version
+
+**Solution:**
+
+1. Check current version:
+   ```bash
+   python3 -c "import gi; print(gi.__version__)"
+   ```
+
+2. Update PyGObject:
+   ```bash
+   # Debian/Ubuntu
+   sudo apt update
+   sudo apt upgrade python3-gi
+   
+   # Fedora
+   sudo dnf update python3-gobject
+   ```
+
+3. If your distribution doesn't have PyGObject >= 3.42.0, you may need to upgrade your OS or use a newer Python environment.
+
+## GLib MainLoop Issues
+
+### "GLib MainLoop not running"
+
+**Error:** `RuntimeError: GLib MainLoop not running` or operations hang indefinitely
+
+**Causes:**
+- MainLoop thread failed to start
+- Thread synchronization issue
+- GLib not properly initialized
+
+**Solution:**
+
+1. Check if GLib is working:
+   ```bash
+   python3 -c "from gi.repository import GLib; loop = GLib.MainLoop(); print('GLib OK')"
+   ```
+
+2. View detailed logs:
+   ```bash
+   tail -f ~/.local/share/pia-nm/logs/pia-nm.log
+   ```
+
+3. Try restarting the operation:
+   ```bash
+   pia-nm refresh
+   ```
+
+4. If issue persists, check for threading issues:
+   ```bash
+   python3 -c "
+   from gi.repository import GLib
+   import threading
+   
+   def run_loop():
+       loop = GLib.MainLoop()
+       loop.run()
+   
+   thread = threading.Thread(target=run_loop, daemon=True)
+   thread.start()
+   print('Thread started:', thread.is_alive())
+   "
+   ```
+
+### "D-Bus operation timeout"
+
+**Error:** `TimeoutError: D-Bus operation timed out`
+
+**Causes:**
+- NetworkManager not responding
+- D-Bus system overloaded
+- Operation genuinely taking too long
+
+**Solution:**
+
+1. Check NetworkManager status:
+   ```bash
+   systemctl status NetworkManager
+   ```
+
+2. Check D-Bus system load:
+   ```bash
+   dbus-monitor --system
+   ```
+
+3. Try the operation again (may be transient):
+   ```bash
+   pia-nm refresh
+   ```
+
+4. Check NetworkManager logs for errors:
+   ```bash
+   journalctl -u NetworkManager -n 100
+   ```
 
 ## Network Connectivity Issues
 
