@@ -8,6 +8,7 @@ This module provides:
 """
 
 import logging
+import re
 import sys
 from typing import Optional
 
@@ -45,6 +46,30 @@ class SystemDependencyError(PIANMError):
 
 class WireGuardError(PIANMError):
     """WireGuard operation failed."""
+
+
+class DBusError(PIANMError):
+    """Base exception for D-Bus operations."""
+
+
+class ConnectionCreationError(DBusError):
+    """Failed to create NetworkManager connection."""
+
+
+class ConnectionActivationError(DBusError):
+    """Failed to activate NetworkManager connection."""
+
+
+class ConnectionUpdateError(DBusError):
+    """Failed to update NetworkManager connection."""
+
+
+class PeerConfigurationError(DBusError):
+    """Invalid WireGuard peer configuration."""
+
+
+class GLibError(DBusError):
+    """GLib/D-Bus operation failed."""
 
 
 # Error message templates
@@ -180,6 +205,39 @@ ERROR_MESSAGES = {
             "If problem persists, check PIA status page",
         ],
     },
+    "dbus_unavailable": {
+        "title": "NetworkManager D-Bus API unavailable",
+        "message": "Please ensure:",
+        "steps": [
+            "NetworkManager is running: systemctl status NetworkManager",
+            "PyGObject is installed: sudo apt install python3-gi gir1.2-nm-1.0",
+            "NetworkManager version >= 1.16 (for WireGuard support)",
+        ],
+    },
+    "connection_creation_failed": {
+        "title": "Failed to create VPN connection",
+        "message": "This may be due to:",
+        "steps": [
+            "Invalid WireGuard configuration",
+            "NetworkManager not running",
+            "Insufficient permissions",
+        ],
+        "additional": [
+            "Try:",
+            "  - Check logs: journalctl -u NetworkManager",
+            "  - Verify configuration: pia-nm status",
+            "  - Run with sudo if needed",
+        ],
+    },
+    "activation_timeout": {
+        "title": "Connection activation timed out",
+        "message": "The connection was created but failed to activate within 15 seconds.",
+        "steps": [
+            "Check NetworkManager logs: journalctl -u NetworkManager",
+            "Verify network connectivity",
+            "Try activating manually: nmcli connection up PIA-{region}",
+        ],
+    },
 }
 
 
@@ -232,11 +290,15 @@ def handle_error(
     error_type = type(exception).__name__
     error_msg = str(exception)
 
-    # Log the error with full context
-    if context:
-        logger.error(f"{context}: {error_type}: {error_msg}", exc_info=True)
+    # Filter sensitive data from error message
+    filtered_error_msg = filter_sensitive_data(error_msg)
+    filtered_context = filter_sensitive_data(context) if context else None
+
+    # Log the error with full context (filtered)
+    if filtered_context:
+        logger.error(f"{filtered_context}: {error_type}: {filtered_error_msg}", exc_info=True)
     else:
-        logger.error(f"{error_type}: {error_msg}", exc_info=True)
+        logger.error(f"{error_type}: {filtered_error_msg}", exc_info=True)
 
     # Map exception types to error messages
     error_mapping = {
@@ -247,12 +309,18 @@ def handle_error(
         "NetworkManagerError": "nm_operation_failed",
         "SystemDependencyError": "wireguard_not_installed",
         "WireGuardError": "key_generation_failed",
+        "DBusError": "dbus_unavailable",
+        "ConnectionCreationError": "connection_creation_failed",
+        "ConnectionActivationError": "activation_timeout",
+        "ConnectionUpdateError": "nm_operation_failed",
+        "PeerConfigurationError": "connection_creation_failed",
+        "GLibError": "dbus_unavailable",
     }
 
     error_key = error_mapping.get(error_type, "auth_invalid_credentials")
 
-    # Print user-friendly error message
-    print_error(error_key, additional_info=error_msg if error_msg else None)
+    # Print user-friendly error message (with filtered data)
+    print_error(error_key, additional_info=filtered_error_msg if filtered_error_msg else None)
 
     # Exit if requested
     if exit_code is not None:
@@ -335,3 +403,71 @@ def log_file_operation(operation: str, file_path: str, success: bool = True) -> 
     """
     status = "success" if success else "failed"
     logger.info("File operation: %s %s (%s)", operation, file_path, status)
+
+
+def filter_sensitive_data(text: str) -> str:
+    """Filter sensitive data from text (logs, exceptions, etc.).
+
+    This function removes or masks:
+    - WireGuard private keys (base64 strings ~44 chars)
+    - Passwords
+    - Authentication tokens (JWT and similar)
+    - API keys
+
+    Args:
+        text: Text that may contain sensitive data
+
+    Returns:
+        Text with sensitive data replaced with [REDACTED]
+    """
+    if not text:
+        return text
+
+    # Pattern for WireGuard private keys (base64, typically 44 chars ending in =)
+    # Match base64 strings that look like keys
+    text = re.sub(
+        r'\b[A-Za-z0-9+/]{40,}={0,2}\b',
+        '[REDACTED_KEY]',
+        text
+    )
+
+    # Pattern for JWT tokens (three base64 segments separated by dots)
+    text = re.sub(
+        r'\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b',
+        '[REDACTED_TOKEN]',
+        text
+    )
+
+    # Pattern for password fields in various formats
+    text = re.sub(
+        r'(password["\']?\s*[:=]\s*["\']?)([^"\'\s,}]+)',
+        r'\1[REDACTED_PASSWORD]',
+        text,
+        flags=re.IGNORECASE
+    )
+
+    # Pattern for private-key fields
+    text = re.sub(
+        r'(private[-_]?key["\']?\s*[:=]\s*["\']?)([^"\'\s,}]+)',
+        r'\1[REDACTED_KEY]',
+        text,
+        flags=re.IGNORECASE
+    )
+
+    # Pattern for token fields
+    text = re.sub(
+        r'(token["\']?\s*[:=]\s*["\']?)([^"\'\s,}]+)',
+        r'\1[REDACTED_TOKEN]',
+        text,
+        flags=re.IGNORECASE
+    )
+
+    # Pattern for Authorization headers
+    text = re.sub(
+        r'(Authorization["\']?\s*[:=]\s*["\']?(?:Basic|Bearer|Token)\s+)([^\s"\']+)',
+        r'\1[REDACTED]',
+        text,
+        flags=re.IGNORECASE
+    )
+
+    return text
