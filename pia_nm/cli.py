@@ -417,6 +417,22 @@ def cmd_setup() -> None:
         log_operation_failure("install systemd units", e)
         return
 
+    # 9. Install IPv6 leak prevention dispatcher
+    print("\nInstalling IPv6 leak prevention...")
+    try:
+        log_operation_start("install dispatcher script")
+        from pia_nm.dispatcher import install_dispatcher_script
+        if install_dispatcher_script():
+            print("✓ IPv6 leak prevention installed")
+            log_operation_success("install dispatcher script")
+        else:
+            print("✗ Failed to install IPv6 leak prevention (requires sudo)")
+            logger.warning("Dispatcher script installation failed")
+    except Exception as e:
+        print(f"⚠ Warning: Could not install IPv6 leak prevention: {e}")
+        log_operation_failure("install dispatcher script", e)
+        logger.warning("Continuing without IPv6 leak prevention")
+
     # Success message
     print("\n" + "=" * 50)
     print("✓ Setup Complete!")
@@ -1196,6 +1212,20 @@ def cmd_uninstall() -> None:
     except Exception as e:
         print(f"  ✗ Failed to remove systemd units: {e}")
         log_operation_failure("uninstall systemd units", e)
+
+    # Remove IPv6 leak prevention dispatcher
+    print("\nRemoving IPv6 leak prevention...")
+    try:
+        log_operation_start("uninstall dispatcher script")
+        from pia_nm.dispatcher import uninstall_dispatcher_script
+        if uninstall_dispatcher_script():
+            print("  ✓ Removed IPv6 leak prevention")
+            log_operation_success("uninstall dispatcher script")
+        else:
+            print("  ⚠ Could not remove IPv6 leak prevention (may require sudo)")
+    except Exception as e:
+        print(f"  ⚠ Warning: Could not remove IPv6 leak prevention: {e}")
+        log_operation_failure("uninstall dispatcher script", e)
 
     # Delete config directory
     print("\nRemoving configuration...")

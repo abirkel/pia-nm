@@ -219,7 +219,7 @@ class NMClient:
             self._assert_running_on_main_loop_thread()
             self._nm_client.add_connection_async(
                 connection=connection,
-                save_to_disk=False,  # Don't persist to disk
+                save_to_disk=True,  # Persist to disk for proper routing
                 cancellable=None,
                 callback=callback,
                 user_data=None,

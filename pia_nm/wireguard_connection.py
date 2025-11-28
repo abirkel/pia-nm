@@ -59,7 +59,7 @@ class WireGuardConfig:
         dns_servers: List of DNS server IP addresses
         allowed_ips: CIDR ranges to route through VPN (default: "0.0.0.0/0")
         persistent_keepalive: Keepalive interval in seconds (default: 25)
-        fwmark: Firewall mark for packet routing (default: 51820)
+        fwmark: Firewall mark for packet routing (default: 0 = disabled)
         use_vpn_dns: Whether to use VPN DNS servers (default: True)
         ipv6_enabled: Whether to enable IPv6 (default: False)
     """
@@ -73,7 +73,7 @@ class WireGuardConfig:
     dns_servers: List[str]
     allowed_ips: str = "0.0.0.0/0"  # Default route
     persistent_keepalive: int = 25
-    fwmark: int = 51820
+    fwmark: int = 0  # No fwmark for simple VPN (0 = disabled)
     use_vpn_dns: bool = True
     ipv6_enabled: bool = False
 
@@ -333,6 +333,10 @@ def _add_ipv4_settings(connection: NM.SimpleConnection, config: WireGuardConfig)
     ipv4_config.add_address(ip_address)
     logger.debug("Set peer IP: %s/32", config.peer_ip)
 
+    # Note: We don't add explicit routes here. NetworkManager automatically
+    # creates routes based on the WireGuard peer's allowed-ips setting.
+    # The peer's allowed-ips="0.0.0.0/0" tells NM to route all traffic through the VPN.
+
     # Configure DNS if use_vpn_dns is enabled
     if config.use_vpn_dns:
         # Set DNS priority to -1500 (highest priority)
@@ -362,7 +366,7 @@ def _add_ipv6_settings(connection: NM.SimpleConnection, config: WireGuardConfig)
     """
     Add NM.SettingIP6Config to the connection.
 
-    This configures IPv6 (disabled by default).
+    This configures IPv6 (disabled by default to prevent leaks).
 
     Args:
         connection: NM.SimpleConnection to add settings to
@@ -383,7 +387,9 @@ def _add_ipv6_settings(connection: NM.SimpleConnection, config: WireGuardConfig)
     else:
         # IPv6 is disabled (default)
         logger.debug("IPv6 disabled")
-        ipv6_config.set_property(NM.SETTING_IP_CONFIG_METHOD, NM.SETTING_IP6_CONFIG_METHOD_DISABLED)
+        ipv6_config.set_property(
+            NM.SETTING_IP_CONFIG_METHOD, NM.SETTING_IP6_CONFIG_METHOD_DISABLED
+        )
 
     # Add the settings to the connection
     connection.add_setting(ipv6_config)
