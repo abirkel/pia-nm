@@ -80,7 +80,8 @@ def setup_logging(verbose: bool = False, log_dir: Optional[Path] = None) -> None
     """Configure logging to file and console with rotation.
 
     Args:
-        verbose: If True, set log level to DEBUG. Otherwise INFO.
+        verbose: If True, set log level to INFO for console and DEBUG for file.
+                Otherwise WARNING for console and INFO for file.
         log_dir: Optional custom log directory. Defaults to ~/.local/share/pia-nm/logs
     """
     if log_dir is None:
@@ -89,7 +90,11 @@ def setup_logging(verbose: bool = False, log_dir: Optional[Path] = None) -> None
     # Create log directory if it doesn't exist
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    log_level = logging.DEBUG if verbose else logging.INFO
+    # File always logs at INFO or DEBUG level
+    file_log_level = logging.DEBUG if verbose else logging.INFO
+    # Console only shows INFO+ when verbose, otherwise WARNING+
+    console_log_level = logging.INFO if verbose else logging.WARNING
+    
     log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     formatter = logging.Formatter(log_format)
 
@@ -97,25 +102,27 @@ def setup_logging(verbose: bool = False, log_dir: Optional[Path] = None) -> None
     sensitive_filter = SensitiveDataFilter()
 
     # File handler with rotation (keep last 10 files)
+    # File always gets detailed logs
     log_file = log_dir / "pia-nm.log"
     file_handler = logging.handlers.RotatingFileHandler(
         log_file,
         maxBytes=10 * 1024 * 1024,  # 10 MB per file
         backupCount=10,  # Keep last 10 files
     )
-    file_handler.setLevel(log_level)
+    file_handler.setLevel(file_log_level)
     file_handler.setFormatter(formatter)
     file_handler.addFilter(sensitive_filter)
 
     # Console handler (for user-facing messages)
+    # Console only shows important messages unless verbose
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(log_level)
+    console_handler.setLevel(console_log_level)
     console_handler.setFormatter(formatter)
     console_handler.addFilter(sensitive_filter)
 
-    # Root logger configuration
+    # Root logger configuration - set to DEBUG to let handlers filter
     root_logger = logging.getLogger()
-    root_logger.setLevel(log_level)
+    root_logger.setLevel(logging.DEBUG)
 
     # Remove any existing handlers to avoid duplicates
     root_logger.handlers.clear()
@@ -124,9 +131,9 @@ def setup_logging(verbose: bool = False, log_dir: Optional[Path] = None) -> None
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
 
-    # Log startup message
+    # Log startup message (only to file unless verbose)
     logger = logging.getLogger(__name__)
-    logger.debug(f"Logging initialized (level={logging.getLevelName(log_level)}, file={log_file})")
+    logger.debug(f"Logging initialized (console={logging.getLevelName(console_log_level)}, file={logging.getLevelName(file_log_level)}, path={log_file})")
 
 
 def get_logger(name: str) -> logging.Logger:

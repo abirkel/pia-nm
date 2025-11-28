@@ -333,9 +333,14 @@ def _add_ipv4_settings(connection: NM.SimpleConnection, config: WireGuardConfig)
     ipv4_config.add_address(ip_address)
     logger.debug("Set peer IP: %s/32", config.peer_ip)
 
-    # Note: We don't add explicit routes here. NetworkManager automatically
-    # creates routes based on the WireGuard peer's allowed-ips setting.
-    # The peer's allowed-ips="0.0.0.0/0" tells NM to route all traffic through the VPN.
+    # Set gateway to 0.0.0.0 for point-to-point WireGuard connection
+    # This tells NetworkManager this is a valid default route without a traditional gateway
+    ipv4_config.set_property(NM.SETTING_IP_CONFIG_GATEWAY, "0.0.0.0")
+    logger.debug("Set gateway to 0.0.0.0 for point-to-point connection")
+
+    # Note: NetworkManager automatically creates routes based on the WireGuard 
+    # peer's allowed-ips setting. The peer's allowed-ips="0.0.0.0/0" tells NM 
+    # to route all traffic through the VPN.
 
     # Configure DNS if use_vpn_dns is enabled
     if config.use_vpn_dns:
