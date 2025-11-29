@@ -102,27 +102,27 @@ jobs:
           body: |
             ## Installation
 
-            ### Fedora/RHEL/Aurora/Bluefin (RPM - Recommended)
+            ### Atomic Fedora (Aurora, Bluefin, Silverblue) - RPM Recommended
 
             ```bash
             # Download the RPM
-            curl -L -O https://github.com/abirkel/pia-nm/releases/\
-            download/${{ github.ref_name }}/\
-            pia-nm-${{ steps.version.outputs.version }}-1.fc*.noarch.rpm
+            curl -L -O https://github.com/abirkel/pia-nm/releases/download/${{ github.ref_name }}/pia-nm-${{ steps.version.outputs.version }}-1.fc*.noarch.rpm
 
-            # Install with dnf (handles dependencies automatically)
-            sudo dnf install ./pia-nm-*.rpm
-
-            # Run setup
-            pia-nm setup
+            # Install with rpm-ostree
+            rpm-ostree install ./pia-nm-*.rpm
+            sudo systemctl reboot
             ```
 
-            ### Debian/Ubuntu or pip install
+            ### Traditional Fedora, Debian, Ubuntu - pip install
 
-            See [INSTALL.md](https://github.com/abirkel/pia-nm/\
-            blob/main/INSTALL.md) for pip installation instructions.
+            ```bash
+            # Fedora
+            sudo dnf install python3-gobject NetworkManager wireguard-tools python3-pip
+            pip install --user git+https://github.com/abirkel/pia-nm.git
 
-            ## What's New
+            # Debian/Ubuntu
+            sudo apt install python3-gi gir1.2-nm-1.0 network-manager wireguard-tools python3-pip
+            pip install --user git+https://github.com/abirkel/pia-nm.git
+            ```
 
-            See [CHANGELOG.md](https://github.com/abirkel/pia-nm/\
-            blob/main/CHANGELOG.md) for details.
+            See [INSTALL.md](https://github.com/abirkel/pia-nm/blob/main/INSTALL.md) for detailed instructions.
