@@ -9,7 +9,7 @@ Summary:        Automated WireGuard token refresh for Private Internet Access VP
 
 License:        GPLv3
 URL:            https://github.com/abirkel/pia-nm
-Source0:        https://github.com/abirkel/pia-nm/archive/v%{version}.tar.gz
+Source0:        %{name}-%{version}.tar.gz
 BuildArch:      noarch
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
@@ -45,14 +45,15 @@ Features:
 %autosetup -n %{name}-%{version}
 
 %build
-%py3_build
+%pyproject_wheel
 
 %check
 # Tests require NetworkManager D-Bus which isn't available in build environment
 # Tests are run during development and CI
 
 %install
-%py3_install
+%pyproject_install
+%pyproject_save_files pia_nm
 
 # Install systemd user units
 mkdir -p %{buildroot}%{_userunitdir}
@@ -87,12 +88,10 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
-%files
+%files -f %{pyproject_files}
 %license LICENSE
 %doc README.md INSTALL.md COMMANDS.md TROUBLESHOOTING.md
 %{_bindir}/pia-nm
-%{python3_sitelib}/pia_nm/
-%{python3_sitelib}/pia_nm-*.egg-info/
 %{_userunitdir}/pia-nm-refresh.service
 %{_userunitdir}/pia-nm-refresh.timer
 
