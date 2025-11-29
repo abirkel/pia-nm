@@ -4,13 +4,13 @@
 
 Choose your installation method based on your system:
 
-- **Fedora/RHEL/Aurora/Bluefin**: Use RPM (recommended)
-- **Debian/Ubuntu**: Use pip
+- **Atomic Fedora (Aurora, Bluefin, Silverblue)**: Use RPM (recommended)
+- **Traditional Fedora, Debian, Ubuntu**: Use pip
 - **Development**: Use pip with editable install
 
 ---
 
-## Method 1: RPM Installation (Recommended for Fedora-based Systems)
+## Method 1: RPM Installation (Recommended for Atomic Fedora Only)
 
 ### For Atomic Fedora Systems (Aurora, Bluefin, Silverblue)
 
@@ -31,18 +31,7 @@ After reboot, verify installation:
 pia-nm --help
 ```
 
-### For Traditional Fedora/RHEL Systems
 
-```bash
-# Download the latest RPM
-curl -L -O https://github.com/abirkel/pia-nm/releases/latest/download/pia-nm-0.1.0-1.fc41.noarch.rpm
-
-# Install with dnf (automatically handles dependencies)
-sudo dnf install ./pia-nm-0.1.0-1.fc41.noarch.rpm
-
-# Verify installation
-pia-nm --help
-```
 
 ### What Gets Installed
 
