@@ -49,7 +49,7 @@ jobs:
           mkdir -p pia-nm-${VERSION}
           cp -r pia_nm/ pyproject.toml README.md LICENSE \
             INSTALL.md COMMANDS.md TROUBLESHOOTING.md \
-            pia-nm-${VERSION}/
+            pia-nm.spec pia-nm-${VERSION}/
           tar czf pia-nm-${VERSION}.tar.gz pia-nm-${VERSION}/
 
       - name: Build RPM in Fedora container
