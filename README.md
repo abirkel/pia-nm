@@ -189,10 +189,6 @@ View refresh logs:
 journalctl --user -u pia-nm-refresh.service -f
 ```
 
-## Troubleshooting
-
-Having issues? Check [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for detailed solutions to common problems.
-
 ## Security
 
 - Credentials stored in system keyring (never plaintext)
@@ -200,23 +196,13 @@ Having issues? Check [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for detailed solut
 - WireGuard keys stored with restrictive permissions (0600)
 - No credentials or tokens logged
 
-
-
 ## Contributing
 
 Interested in contributing? See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code standards, and contribution guidelines.
 
-## License
+## Troubleshooting
 
-This project is licensed under the GNU General Public License v3.0 or later (GPLv3+).
-
-This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
-
-See the [LICENSE](LICENSE) file for full license text.
-
-## Attribution
-
-This project adapts D-Bus integration patterns from ProtonVPN's [python-proton-vpn-network-manager](https://github.com/ProtonVPN/python-proton-vpn-network-manager) (GPLv3). See [ATTRIBUTION.md](ATTRIBUTION.md) for details.
+Having issues? Check [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for detailed solutions to common problems.
 
 ## References
 
@@ -226,10 +212,6 @@ This project adapts D-Bus integration patterns from ProtonVPN's [python-proton-v
 - [WireGuard Protocol](https://www.wireguard.com/)
 - [Systemd Timers](https://www.freedesktop.org/software/systemd/man/systemd.timer.html)
 - [ProtonVPN NetworkManager Integration](https://github.com/ProtonVPN/python-proton-vpn-network-manager)
-
-## Support
-
-For issues, questions, or suggestions, please open an issue on GitHub.
 
 ---
 
