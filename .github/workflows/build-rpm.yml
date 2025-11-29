@@ -60,7 +60,7 @@ jobs:
           docker run --rm \
             -v $(pwd):/workspace \
             -w /workspace \
-            fedora:${FEDORA_VERSION} \
+            quay.io/fedora/fedora:${FEDORA_VERSION} \
             bash -c "
               dnf install -y rpm-build python3-devel \
                 python3-setuptools python3-wheel \
