@@ -1,38 +1,35 @@
-.PHONY: help pex install-pex clean test lint format delete-release
+.PHONY: help rpm srpm clean test lint format
 
 help:
 	@echo "Available targets:"
-	@echo "  pex          - Build PEX executable (for development)"
-	@echo "  install-pex  - Build and install PEX to ~/.local/bin"
+	@echo "  rpm          - Build RPM package (requires rpmbuild)"
+	@echo "  srpm         - Build source RPM"
 	@echo "  test         - Run tests"
 	@echo "  lint         - Run linters"
 	@echo "  format       - Format code with black"
 	@echo "  clean        - Remove build artifacts"
 	@echo ""
-	@echo "Note: Regular users should download pre-built PEX from GitHub releases"
+	@echo "Note: Regular users should download pre-built RPMs from GitHub releases"
 
-pex:
-	@echo "Building PEX executable..."
-	@echo "Note: PyGObject is excluded - it will use the system version"
-	@pex . \
-		-r <(echo "requests>=2.31.0" && echo "keyring>=24.0.0" && echo "PyYAML>=6.0") \
-		-c pia-nm \
-		-o pia-nm.pex \
-		--python-shebang "/usr/bin/env python3" \
-		--inherit-path=prefer
-	@chmod +x pia-nm.pex
-	@echo "✓ Built: pia-nm.pex"
+rpm: srpm
+	@echo "Building RPM package..."
+	@rpmbuild --rebuild pia-nm-*.src.rpm
+	@echo "✓ RPM built in ~/rpmbuild/RPMS/noarch/"
 
-install-pex: pex
-	@echo "Installing to ~/.local/bin/pia-nm..."
-	@mkdir -p ~/.local/bin
-	@cp pia-nm.pex ~/.local/bin/pia-nm
-	@echo "✓ Installed to ~/.local/bin/pia-nm"
-	@echo ""
-	@echo "Make sure ~/.local/bin is in your PATH"
+srpm:
+	@echo "Building source RPM..."
+	@mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+	@VERSION=$$(grep '^version = ' pyproject.toml | cut -d'"' -f2); \
+	mkdir -p pia-nm-$$VERSION; \
+	cp -r pia_nm/ pyproject.toml README.md LICENSE INSTALL.md COMMANDS.md TROUBLESHOOTING.md pia-nm-$$VERSION/; \
+	tar czf ~/rpmbuild/SOURCES/pia-nm-$$VERSION.tar.gz pia-nm-$$VERSION/; \
+	rm -rf pia-nm-$$VERSION; \
+	cp pia-nm.spec ~/rpmbuild/SPECS/; \
+	rpmbuild -bs ~/rpmbuild/SPECS/pia-nm.spec
+	@echo "✓ Source RPM built in ~/rpmbuild/SRPMS/"
 
 clean:
-	rm -rf build/ dist/ *.egg-info pia-nm.pex
+	rm -rf build/ dist/ *.egg-info *.tar.gz pia-nm-*/
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
 
@@ -46,5 +43,4 @@ lint:
 format:
 	python3 -m black pia_nm/ tests/
 
-delete-release:
-	git tag -d v-test; git push origin :v-test; git tag v-test; git push origin v-test
+

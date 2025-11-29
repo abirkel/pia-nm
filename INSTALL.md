@@ -1,38 +1,77 @@
 # Installation Guide for pia-nm
 
-## For Atomic Fedora Systems (Aurora, Bluefin, Silverblue)
+## Quick Start
 
-Since atomic Fedora systems have an immutable base, we distribute pia-nm as a PEX (Python EXecutable) file. This is a single executable that bundles all Python dependencies - no pip or package installation needed on your system.
+Choose your installation method based on your system:
 
-### Prerequisites
+- **Fedora/RHEL/Aurora/Bluefin**: Use RPM (recommended)
+- **Debian/Ubuntu**: Use pip
+- **Development**: Use pip with editable install
 
-Verify system packages are installed (usually pre-installed on Aurora/Bluefin):
+---
+
+## Method 1: RPM Installation (Recommended for Fedora-based Systems)
+
+### For Atomic Fedora Systems (Aurora, Bluefin, Silverblue)
 
 ```bash
-# Check if packages are installed
-rpm -q wireguard-tools NetworkManager python3-gobject
+# Download the latest RPM
+curl -L -O https://github.com/abirkel/pia-nm/releases/latest/download/pia-nm-0.1.0-1.fc41.noarch.rpm
 
-# If missing, install them
-sudo rpm-ostree install wireguard-tools NetworkManager python3-gobject
+# Install with rpm-ostree
+rpm-ostree install ./pia-nm-0.1.0-1.fc41.noarch.rpm
+
+# Reboot to apply
 sudo systemctl reboot
 ```
 
-**Important**: PyGObject (python3-gobject) is required for D-Bus communication with NetworkManager. This package provides Python bindings for GObject introspection, which pia-nm uses to interact with NetworkManager's D-Bus API. This is typically pre-installed on Fedora-based systems.
-
-**Note**: The GObject introspection data for NetworkManager (gir1.2-nm-1.0 on Debian/Ubuntu) is usually included with the NetworkManager package on Fedora systems.
-
-### Installation Steps
+After reboot, verify installation:
 
 ```bash
-# Download the latest release (built automatically by GitHub Actions)
-curl -L -o pia-nm https://github.com/abirkel/pia-nm/releases/latest/download/pia-nm.pex
+pia-nm --help
+```
 
-# Make it executable
-chmod +x pia-nm
+### For Traditional Fedora/RHEL Systems
 
-# Move to your local bin directory
-mkdir -p ~/.local/bin
-mv pia-nm ~/.local/bin/
+```bash
+# Download the latest RPM
+curl -L -O https://github.com/abirkel/pia-nm/releases/latest/download/pia-nm-0.1.0-1.fc41.noarch.rpm
+
+# Install with dnf (automatically handles dependencies)
+sudo dnf install ./pia-nm-0.1.0-1.fc41.noarch.rpm
+
+# Verify installation
+pia-nm --help
+```
+
+### What Gets Installed
+
+The RPM package installs:
+- `/usr/bin/pia-nm` - Main executable
+- `/usr/lib/systemd/user/pia-nm-refresh.service` - Systemd service unit
+- `/usr/lib/systemd/user/pia-nm-refresh.timer` - Systemd timer unit
+- Python package and dependencies
+
+All dependencies are automatically installed:
+- `python3-requests` - HTTP client for PIA API
+- `python3-keyring` - Secure credential storage
+- `python3-pyyaml` - Configuration file handling
+- `python3-gobject` - D-Bus communication with NetworkManager
+- `NetworkManager` - Network management daemon
+- `wireguard-tools` - WireGuard key generation
+
+---
+
+## Method 2: pip Installation
+
+### Fedora/RHEL Systems
+
+```bash
+# Install system dependencies (MUST be installed via dnf, not pip)
+sudo dnf install python3-gobject NetworkManager wireguard-tools python3-pip
+
+# Install pia-nm via pip
+pip install --user git+https://github.com/abirkel/pia-nm.git
 
 # Ensure ~/.local/bin is in your PATH
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
@@ -42,125 +81,115 @@ source ~/.bashrc
 pia-nm --help
 ```
 
-That's it! The PEX file contains everything needed. No pip, no virtual environments, no dependency hell.
-
-### For Developers: Building from Source
-
-Only needed if you're developing pia-nm. Regular users should use the pre-built PEX above.
+### Debian/Ubuntu Systems
 
 ```bash
-# Clone the repository
-git clone https://github.com/abirkel/pia-nm.git
-cd pia-nm
+# Install system dependencies (MUST be installed via apt, not pip)
+sudo apt install python3-gi gir1.2-nm-1.0 network-manager wireguard-tools python3-pip
 
-# Build in a toolbox (keeps your base system clean)
-toolbox create -c dev
-toolbox enter dev
-pip install pex
-make pex
-exit
-
-# Install the locally-built PEX
-cp pia-nm.pex ~/.local/bin/pia-nm
-```
-
-## For Traditional Linux Systems
-
-If you're on a traditional (non-atomic) system, you can use either PEX or pip:
-
-### Option 1: PEX (Recommended - Same as Atomic)
-
-```bash
-curl -L -o pia-nm https://github.com/abirkel/pia-nm/releases/latest/download/pia-nm.pex
-chmod +x pia-nm
-sudo mv pia-nm /usr/local/bin/
-```
-
-### Option 2: pip
-
-```bash
-# Install system dependencies (Debian/Ubuntu)
-sudo apt install python3-gi gir1.2-nm-1.0 wireguard-tools network-manager python3-pip
-
-# Or on Fedora/RHEL
-sudo dnf install python3-gobject NetworkManager wireguard-tools python3-pip
-
-# Install from GitHub
+# Install pia-nm via pip
 pip install --user git+https://github.com/abirkel/pia-nm.git
+
+# Ensure ~/.local/bin is in your PATH
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# Verify installation
+pia-nm --help
 ```
 
-**Important**: PyGObject and GObject introspection data must be installed via system package manager (apt/dnf), not pip, as they require system libraries and introspection data files.
+### Why System Packages Are Required
 
-#### Understanding the Dependencies
+**PyGObject (python3-gobject / python3-gi)** MUST be installed via system package manager because:
+- It requires compiled C extensions linked to system libraries (GLib, GObject)
+- It needs GObject introspection data files installed system-wide
+- pip cannot provide these system-level dependencies
 
-- **python3-gi / python3-gobject**: Python bindings for GObject introspection (PyGObject)
-- **gir1.2-nm-1.0** (Debian/Ubuntu): GObject introspection data for NetworkManager 1.0 API
-  - On Fedora, this is typically included with the NetworkManager package
-- **NetworkManager**: The network management daemon (>= 1.16 for WireGuard support)
-- **wireguard-tools**: Provides the `wg` command for key generation
+**GObject Introspection Data (gir1.2-nm-1.0)** provides:
+- Type information for NetworkManager's D-Bus API
+- Enables type-safe Python bindings to NetworkManager
+- On Fedora, this is typically included with the NetworkManager package
+- On Debian/Ubuntu, it must be installed separately
 
-These dependencies enable pia-nm to communicate with NetworkManager via D-Bus using type-safe Python objects.
+---
 
 ## Verify D-Bus Setup
 
-Before running the setup wizard, verify that all D-Bus dependencies are correctly installed:
+Before running setup, verify all D-Bus dependencies are correctly installed:
 
 ```bash
-python3 pia_nm/verify_dbus_setup.py
+python3 -c "
+import gi
+gi.require_version('NM', '1.0')
+from gi.repository import NM
+client = NM.Client.new(None)
+print(f'✓ NetworkManager version: {client.get_version()}')
+print('✓ D-Bus setup is correct')
+"
 ```
 
-This script checks:
-- Python version (>= 3.9)
-- PyGObject installation and version (>= 3.42.0)
-- NetworkManager GObject introspection data (gir1.2-nm-1.0 or equivalent)
-- NetworkManager version (>= 1.16 for WireGuard support)
-- NM.Client creation via D-Bus
-- GLib MainLoop functionality
+If this fails, install the missing dependencies as shown above.
 
-If any checks fail, install the missing dependencies as shown in the error messages.
-
-### Common D-Bus Setup Issues
-
-**"No module named 'gi'"**
-```bash
-# Debian/Ubuntu
-sudo apt install python3-gi
-
-# Fedora/RHEL
-sudo dnf install python3-gobject
-```
-
-**"Namespace 'NM' not available"**
-```bash
-# Debian/Ubuntu
-sudo apt install gir1.2-nm-1.0
-
-# Fedora (usually included with NetworkManager)
-sudo dnf install NetworkManager
-```
-
-**"NetworkManager version too old"**
-```bash
-# Check your version
-nmcli --version
-
-# WireGuard support requires NetworkManager >= 1.16
-# Upgrade NetworkManager if needed
-```
+---
 
 ## Initial Setup
 
-After installation and verification, run the setup wizard:
+After installation, run the setup wizard:
 
 ```bash
 pia-nm setup
 ```
 
-This will:
-1. Prompt for your PIA credentials
+This interactive wizard will:
+1. Prompt for your PIA credentials (stored securely in system keyring)
 2. Let you select regions to configure
-3. Create NetworkManager profiles
-4. Install systemd timer for automatic token refresh
+3. Create NetworkManager WireGuard profiles
+4. Install and enable systemd timer for automatic token refresh
+
+Example session:
+
+```
+PIA NetworkManager Setup
+========================================
+
+PIA Username: your_username
+PIA Password: ********
+
+Testing credentials...
+✓ Authentication successful
+✓ Credentials stored in keyring
+
+Fetching available regions...
+
+Available regions:
+  1. us-east              US East
+  2. us-west              US West
+  3. uk-london            UK London
+  4. jp-tokyo             Japan Tokyo
+  ...
+
+Enter region IDs to configure (comma-separated):
+Example: us-east,uk-london,jp-tokyo
+> us-east,uk-london
+
+Creating profiles...
+  Setting up us-east...
+  ✓ us-east configured
+  Setting up uk-london...
+  ✓ uk-london configured
+
+Installing systemd timer...
+✓ Setup complete!
+
+You can now:
+  - View regions: pia-nm status
+  - Connect via NetworkManager GUI
+  - Connect via CLI: nmcli connection up PIA-US-East
+
+Token refresh runs automatically every 12 hours.
+```
+
+---
 
 ## Verify Installation
 
@@ -173,51 +202,178 @@ pia-nm status
 
 # List available regions
 pia-nm list-regions
+
+# Check systemd timer
+systemctl --user status pia-nm-refresh.timer
 ```
+
+---
+
+## For Developers: Building from Source
+
+### Build RPM Locally
+
+```bash
+# Clone repository
+git clone https://github.com/abirkel/pia-nm.git
+cd pia-nm
+
+# Install build dependencies
+sudo dnf install rpm-build python3-devel python3-setuptools python3-wheel
+
+# Build source RPM
+make srpm
+
+# Build binary RPM
+make rpm
+
+# Install locally built RPM
+sudo dnf install ~/rpmbuild/RPMS/noarch/pia-nm-*.rpm
+```
+
+### Development Install with pip
+
+```bash
+# Clone repository
+git clone https://github.com/abirkel/pia-nm.git
+cd pia-nm
+
+# Install system dependencies
+sudo dnf install python3-gobject NetworkManager wireguard-tools
+
+# Install in editable mode with dev dependencies
+pip install --user -e ".[dev]"
+
+# Run tests
+pytest
+
+# Format code
+black pia_nm/
+
+# Type check
+mypy pia_nm/
+
+# Lint
+pylint pia_nm/
+```
+
+---
 
 ## Troubleshooting
 
 ### "command not found: pia-nm"
 
-Make sure `~/.local/bin` is in your PATH:
+**For RPM install**: The package installs to `/usr/bin/pia-nm` which should be in your PATH automatically.
+
+**For pip install**: Make sure `~/.local/bin` is in your PATH:
 
 ```bash
 echo $PATH | grep -q "$HOME/.local/bin" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-### "No module named 'keyring'"
+### "No module named 'gi'"
 
-The PEX file should bundle all dependencies. If you see this error, rebuild the PEX:
+PyGObject is not installed. Install via system package manager:
 
 ```bash
-pex . -r <(echo "requests>=2.31.0" && echo "keyring>=24.0.0" && echo "PyYAML>=6.0") -c pia-nm -o pia-nm.pex
+# Fedora/RHEL
+sudo dnf install python3-gobject
+
+# Debian/Ubuntu
+sudo apt install python3-gi
+```
+
+**Do NOT use pip** - PyGObject requires system libraries.
+
+### "Namespace 'NM' not available"
+
+NetworkManager GObject introspection data is missing:
+
+```bash
+# Debian/Ubuntu
+sudo apt install gir1.2-nm-1.0
+
+# Fedora/RHEL (usually included with NetworkManager)
+sudo dnf install NetworkManager
+```
+
+### "NetworkManager version too old"
+
+WireGuard support requires NetworkManager >= 1.16:
+
+```bash
+# Check version
+nmcli --version
+
+# Upgrade if needed
+sudo dnf upgrade NetworkManager  # Fedora
+sudo apt upgrade network-manager  # Debian/Ubuntu
 ```
 
 ### Permission Errors
 
-Ensure the PEX file is executable:
+Ensure your user has permission to modify NetworkManager connections:
 
 ```bash
-chmod +x ~/.local/bin/pia-nm
+# Check if you're in the right group
+groups | grep -E 'wheel|sudo|netdev'
+
+# On Fedora, users in 'wheel' group can modify connections
+# On Debian/Ubuntu, users in 'netdev' group can modify connections
 ```
+
+### RPM Installation Fails on Atomic Systems
+
+On atomic Fedora systems (Aurora, Bluefin, Silverblue), use `rpm-ostree` instead of `dnf`:
+
+```bash
+rpm-ostree install ./pia-nm-*.rpm
+sudo systemctl reboot
+```
+
+---
 
 ## Uninstallation
 
+### RPM Uninstall
+
 ```bash
-# Remove the executable
-rm ~/.local/bin/pia-nm
+# Stop and disable timer first
+systemctl --user disable --now pia-nm-refresh.timer
 
-# Remove configuration and data
-pia-nm uninstall  # Run this before removing the executable
+# Remove package
+sudo dnf remove pia-nm  # Traditional Fedora
+# OR
+rpm-ostree uninstall pia-nm  # Atomic Fedora (requires reboot)
 
-# Or manually remove:
+# Optionally remove configuration and data
 rm -rf ~/.config/pia-nm
 rm -rf ~/.local/share/pia-nm
-systemctl --user disable --now pia-nm-refresh.timer
-rm ~/.config/systemd/user/pia-nm-refresh.*
 ```
+
+### pip Uninstall
+
+```bash
+# Stop and disable timer first
+systemctl --user disable --now pia-nm-refresh.timer
+
+# Remove systemd units
+rm ~/.config/systemd/user/pia-nm-refresh.*
+systemctl --user daemon-reload
+
+# Uninstall package
+pip uninstall pia-nm
+
+# Optionally remove configuration and data
+rm -rf ~/.config/pia-nm
+rm -rf ~/.local/share/pia-nm
+```
+
+---
 
 ## Next Steps
 
-See [README.md](README.md) for usage instructions and [COMMANDS.md](COMMANDS.md) for detailed command reference.
+- See [README.md](README.md) for usage overview
+- See [COMMANDS.md](COMMANDS.md) for detailed command reference
+- See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues

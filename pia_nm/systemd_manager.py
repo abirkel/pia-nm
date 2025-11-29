@@ -100,11 +100,25 @@ WantedBy=timers.target
 """
 
 
+def _check_system_units_exist() -> bool:
+    """Check if systemd units are installed system-wide (RPM install).
+
+    Returns:
+        True if units exist in /usr/lib/systemd/user/, False otherwise
+    """
+    system_unit_dir = Path("/usr/lib/systemd/user")
+    service_file = system_unit_dir / "pia-nm-refresh.service"
+    timer_file = system_unit_dir / "pia-nm-refresh.timer"
+
+    return service_file.exists() and timer_file.exists()
+
+
 def install_units() -> bool:
     """Install systemd service and timer units.
 
-    Creates ~/.config/systemd/user/ directory if needed, writes service and timer
-    unit files, reloads systemd daemon, and enables/starts the timer.
+    Checks if units are already installed system-wide (RPM install). If so,
+    just enables/starts the timer. Otherwise, installs units to user directory
+    (pip install scenario).
 
     Returns:
         True if installation successful, False otherwise
@@ -114,6 +128,37 @@ def install_units() -> bool:
     """
     try:
         logger.info("Installing systemd units")
+
+        # Check if units already exist in system location (RPM install)
+        if _check_system_units_exist():
+            logger.info("Systemd units found in /usr/lib/systemd/user/ (RPM install)")
+            logger.info("Skipping unit installation, will enable timer only")
+
+            # Reload systemd daemon to pick up system units
+            logger.debug("Reloading systemd user daemon")
+            subprocess.run(
+                ["systemctl", "--user", "daemon-reload"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            # Enable and start timer
+            logger.debug("Enabling and starting pia-nm-refresh.timer")
+            subprocess.run(
+                ["systemctl", "--user", "enable", "--now", "pia-nm-refresh.timer"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            logger.info("Timer enabled successfully (using system units)")
+            return True
+
+        # Units not in system location, install to user directory (pip install)
+        logger.info("Installing systemd units to ~/.config/systemd/user/ (pip install)")
 
         # Create systemd user directory
         systemd_user_dir = Path.home() / ".config/systemd/user"

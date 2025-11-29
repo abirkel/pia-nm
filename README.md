@@ -56,18 +56,31 @@ This will check that all required components are installed and working correctly
 
 ## Installation
 
-Download the pre-built PEX executable (works on all systems, no pip needed):
+### Fedora/RHEL/Aurora/Bluefin (RPM - Recommended)
 
 ```bash
-curl -L -o pia-nm https://github.com/abirkel/pia-nm/releases/latest/download/pia-nm.pex
-chmod +x pia-nm
-mkdir -p ~/.local/bin
-mv pia-nm ~/.local/bin/
+# Download the latest RPM
+curl -L -O https://github.com/abirkel/pia-nm/releases/latest/download/pia-nm-0.1.0-1.fc41.noarch.rpm
+
+# Install with dnf (traditional Fedora)
+sudo dnf install ./pia-nm-0.1.0-1.fc41.noarch.rpm
+
+# OR install with rpm-ostree (atomic Fedora - Aurora, Bluefin, Silverblue)
+rpm-ostree install ./pia-nm-0.1.0-1.fc41.noarch.rpm
+sudo systemctl reboot
 ```
 
-**Traditional Linux users**: You can also use pip if preferred: `pip install --user git+https://github.com/abirkel/pia-nm.git`
+### Debian/Ubuntu or pip install
 
-See [INSTALL.md](INSTALL.md) for detailed instructions.
+```bash
+# Install system dependencies (REQUIRED - cannot be installed via pip)
+sudo apt install python3-gi gir1.2-nm-1.0 network-manager wireguard-tools python3-pip
+
+# Install pia-nm
+pip install --user git+https://github.com/abirkel/pia-nm.git
+```
+
+See [INSTALL.md](INSTALL.md) for detailed instructions and troubleshooting.
 
 Verify installation:
 
