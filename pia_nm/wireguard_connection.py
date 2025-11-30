@@ -62,6 +62,13 @@ class WireGuardConfig:
         fwmark: Firewall mark for packet routing (default: 0 = disabled)
         use_vpn_dns: Whether to use VPN DNS servers (default: True)
         ipv6_enabled: Whether to enable IPv6 (default: False)
+
+    Note on Routing:
+        NetworkManager's wireguard.ip4-auto-default-route (enabled by default when
+        peers have 0.0.0.0/0 allowed-ips) uses policy-based routing with a dedicated
+        routing table. The route metric is set to 50 to ensure VPN routes take priority
+        over regular connections (typically metric 100+). The actual routing decision is
+        made by policy rules, not the metric in the main table.
     """
 
     connection_name: str
@@ -338,9 +345,25 @@ def _add_ipv4_settings(connection: NM.SimpleConnection, config: WireGuardConfig)
     ipv4_config.set_property(NM.SETTING_IP_CONFIG_GATEWAY, "0.0.0.0")
     logger.debug("Set gateway to 0.0.0.0 for point-to-point connection")
 
+    # Set route metric to 50
+    # NetworkManager's wireguard.ip4-auto-default-route feature (enabled by default)
+    # uses policy-based routing with a dedicated table. The metric is adjusted by adding
+    # a 20000 offset, resulting in metric 20050 in the dedicated routing table.
+    #
+    # How it works:
+    # 1. Policy rule 31707 selects which routing table to use (table 51880 for VPN)
+    # 2. Once the table is selected, the kernel uses metrics to choose between routes
+    # 3. In our case, there's only one default route in table 51880, so the metric
+    #    doesn't affect route selection - but it's still the correct value to set
+    # 4. If multiple routes existed in the table, the metric would determine priority
+    #
+    # This metric ensures proper priority if multiple routes are added to the table.
+    ipv4_config.set_property(NM.SETTING_IP_CONFIG_ROUTE_METRIC, 50)
+    logger.debug("Set route metric to 50 (will be 20050 in dedicated table)")
+
     # Note: NetworkManager automatically creates routes based on the WireGuard 
     # peer's allowed-ips setting. The peer's allowed-ips="0.0.0.0/0" tells NM 
-    # to route all traffic through the VPN.
+    # to route all traffic through the VPN via policy-based routing rules.
 
     # Configure DNS if use_vpn_dns is enabled
     if config.use_vpn_dns:

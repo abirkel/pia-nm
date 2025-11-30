@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import base64
 import json
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -40,6 +41,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_BASE_URL = "https://www.privateinternetaccess.com"
 REQUEST_TIMEOUT = 10  # seconds
 MAX_RETRIES = 1  # Single immediate retry on network failures
+PIA_CERT_URL = "https://www.privateinternetaccess.com/openvpn/ca.rsa.4096.crt"
+PIA_CERT_PATH = Path.home() / ".config/pia-nm/ca.rsa.4096.crt"
 
 
 class PIAAPIError(Exception):
@@ -69,7 +72,35 @@ class PIAClient:
         """
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
+        self._ensure_ca_cert()
         logger.debug("Initialized PIAClient with base_url: %s", self.base_url)
+
+    def _ensure_ca_cert(self) -> None:
+        """Ensure PIA CA certificate is available locally.
+
+        Downloads and caches PIA's CA certificate for SSL verification.
+        """
+        if PIA_CERT_PATH.exists():
+            logger.debug("Using cached PIA CA certificate")
+            return
+
+        logger.info("Downloading PIA CA certificate")
+        try:
+            response = requests.get(PIA_CERT_URL, timeout=REQUEST_TIMEOUT)
+            response.raise_for_status()
+
+            # Ensure directory exists
+            PIA_CERT_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+            # Write certificate
+            PIA_CERT_PATH.write_text(response.text)
+            PIA_CERT_PATH.chmod(0o644)
+
+            logger.info("PIA CA certificate cached at %s", PIA_CERT_PATH)
+
+        except Exception as e:
+            logger.warning("Failed to download PIA CA certificate: %s", e)
+            logger.warning("SSL verification will be disabled for key registration")
 
     def _validate_response_structure(self, response_data: Any, required_keys: List[str]) -> None:
         """Validate that response contains required keys.
@@ -313,12 +344,15 @@ class PIAClient:
             params = {"pt": token, "pubkey": pubkey}
             headers = {"Host": server_hostname}
 
+            # Use PIA's CA certificate for verification if available
+            verify = str(PIA_CERT_PATH) if PIA_CERT_PATH.exists() else True
+
             response = self.session.get(
                 url,
                 params=params,
                 headers=headers,
                 timeout=REQUEST_TIMEOUT,
-                verify=False,  # PIA uses self-signed certs, would need ca.rsa.4096.crt
+                verify=verify,
             )
             response.raise_for_status()
 
