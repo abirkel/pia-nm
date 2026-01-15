@@ -277,7 +277,7 @@ def cmd_setup() -> None:
 
     for region_id in selected_ids:
         try:
-            print(f"  Setting up {region_id}...", end=" ", flush=True)
+            print(f"  Setting up {region_id}...")
             log_operation_start(f"setup region {region_id}")
 
             # Find region data
@@ -361,7 +361,7 @@ def cmd_setup() -> None:
             # Wait for the operation to complete (with timeout)
             try:
                 remote_connection = future.result(timeout=10)
-                print("✓")
+                print("  ✓ Success")
                 successful_regions.append(region_id)
                 log_operation_success(f"setup region {region_id}")
             except TimeoutError:
@@ -585,7 +585,7 @@ def cmd_refresh(region: Optional[str] = None) -> None:
 
     for region_id in regions_to_refresh:
         try:
-            print(f"  {region_id}...", end=" ", flush=True)
+            print(f"  {region_id}...")
             log_operation_start(f"refresh region {region_id}")
 
             # Find region data
@@ -790,7 +790,7 @@ def cmd_add_region(region_id: str) -> None:
 
     # Generate keypair
     try:
-        print(f"Setting up {region_id}...", end=" ", flush=True)
+        print(f"Setting up {region_id}...")
         log_operation_start(f"generate keypair for {region_id}")
         private_key, public_key = generate_keypair()
         save_keypair(region_id, private_key, public_key)
@@ -877,7 +877,7 @@ def cmd_add_region(region_id: str) -> None:
         # Wait for the operation to complete (with timeout)
         try:
             remote_connection = future.result(timeout=10)
-            print("✓")
+            print("  ✓ Success")
             log_operation_success(f"create profile for {region_id}")
         except TimeoutError:
             print("✗ (timeout)")

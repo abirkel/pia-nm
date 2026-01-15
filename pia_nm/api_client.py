@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import base64
 import json
 import logging
+import socket
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -318,7 +319,7 @@ class PIAClient:
         Args:
             token: Authentication token from authenticate()
             pubkey: WireGuard public key (base64-encoded)
-            server_hostname: Server hostname (e.g., 'us-east.wg.piaservers.net')
+            server_hostname: Server hostname (CN from certificate, e.g., 'tokyo401')
             server_ip: Server IP address
 
         Returns:
@@ -335,25 +336,47 @@ class PIAClient:
             NetworkError: If network communication fails
             APIError: If API returns error response
         """
-        logger.info("Registering WireGuard key with server: %s", server_hostname)
+        logger.info("Registering WireGuard key with server: %s (%s)", server_hostname, server_ip)
 
         try:
             # GET request to server's /addKey endpoint with query parameters
-            # Use IP address directly but set Host header to hostname for cert validation
-            url = f"https://{server_ip}:1337/addKey"
+            # Use hostname in URL for proper SNI, but override DNS resolution to use server_ip
+            # This mimics curl's --connect-to behavior
+            url = f"https://{server_hostname}:1337/addKey"
             params = {"pt": token, "pubkey": pubkey}
-            headers = {"Host": server_hostname}
 
             # Use PIA's CA certificate for verification if available
             verify = str(PIA_CERT_PATH) if PIA_CERT_PATH.exists() else True
 
-            response = self.session.get(
-                url,
-                params=params,
-                headers=headers,
-                timeout=REQUEST_TIMEOUT,
-                verify=verify,
-            )
+            # Create a custom session with DNS override for this specific request
+            # We need to resolve server_hostname to server_ip
+            from requests.adapters import HTTPAdapter
+            from urllib3.util.connection import create_connection
+            import socket
+
+            # Store original getaddrinfo
+            original_getaddrinfo = socket.getaddrinfo
+
+            def custom_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+                # Override DNS resolution for our specific hostname
+                if host == server_hostname:
+                    # Return the server_ip instead of doing DNS lookup
+                    return original_getaddrinfo(server_ip, port, family, type, proto, flags)
+                return original_getaddrinfo(host, port, family, type, proto, flags)
+
+            # Temporarily replace getaddrinfo
+            socket.getaddrinfo = custom_getaddrinfo
+
+            try:
+                response = self.session.get(
+                    url,
+                    params=params,
+                    timeout=REQUEST_TIMEOUT,
+                    verify=verify,
+                )
+            finally:
+                # Restore original getaddrinfo
+                socket.getaddrinfo = original_getaddrinfo
             response.raise_for_status()
 
             try:
