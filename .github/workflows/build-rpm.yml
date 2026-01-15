@@ -1,5 +1,5 @@
 ---
-name: Build RPM
+name: Build and Publish RPM
 
 'on':
   push:
@@ -8,10 +8,23 @@ name: Build RPM
   workflow_dispatch:
     inputs:
       fedora_version:
-        description: 'Fedora version to build for (default: latest)'
+        description: 'Fedora version to build for'
         required: false
-        default: 'latest'
+        default: '41'
         type: string
+      release_type:
+        description: 'Release type (stable or testing)'
+        required: false
+        type: choice
+        options:
+          - stable
+          - testing
+        default: 'stable'
+
+permissions:
+  contents: write
+  packages: write
+  actions: read
 
 jobs:
   build:
@@ -19,6 +32,9 @@ jobs:
     permissions:
       contents: write
       id-token: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      fedora_version: ${{ steps.fedora-version.outputs.version }}
 
     steps:
       - uses: actions/checkout@v4
@@ -30,7 +46,7 @@ jobs:
             echo "version=${{ github.event.inputs.fedora_version }}" \
               >> $GITHUB_OUTPUT
           else
-            echo "version=latest" >> $GITHUB_OUTPUT
+            echo "version=41" >> $GITHUB_OUTPUT
           fi
 
       - name: Extract version from tag
@@ -92,37 +108,130 @@ jobs:
           path: |
             *.rpm
 
-      - name: Create Release
+      - name: Verify built packages
+        run: |
+          set -euo pipefail
+          echo "::group::Verifying built packages"
+
+          if ! ls *.rpm 1>/dev/null 2>&1; then
+            echo "::error::No RPM packages found"
+            exit 1
+          fi
+
+          echo "Built packages:"
+          ls -lh *.rpm
+
+          for pkg in *.rpm; do
+            if [ ! -s "$pkg" ]; then
+              echo "::error::Package file is empty: $pkg"
+              exit 1
+            fi
+          done
+
+          echo "✓ All packages verified"
+          echo "::endgroup::"
+
+  publish-release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: rpm-packages
+          path: artifacts/
+
+      - name: Prepare release notes
+        id: release_notes
+        run: |
+          VERSION="${{ needs.build.outputs.version }}"
+          RELEASE_TYPE="${{ github.event.inputs.release_type || 'stable' }}"
+
+          {
+            echo "notes<<EOF"
+            echo "## ⚠️ Package Signing & Distribution"
+            echo ""
+            echo "The RPM packages in this repository are **unsigned**. For signed, verified packages with automatic updates, use the central RPM repository:"
+            echo ""
+            echo "### Install from Central Repository (Recommended)"
+            echo ""
+            echo "\`\`\`bash"
+            echo "# Add the central repository (${RELEASE_TYPE} channel)"
+            echo "sudo curl -o /etc/yum.repos.d/${RELEASE_TYPE}.repo \\"
+            echo "  https://abirkel.github.io/rpm-repo/repo/${RELEASE_TYPE}.repo"
+            echo ""
+            echo "# Install"
+            echo "sudo dnf install pia-nm"
+            echo "\`\`\`"
+            echo ""
+            echo "The GPG key is automatically imported from the repository configuration."
+            echo ""
+            echo "### Install from This Repository (Unsigned)"
+            echo ""
+            echo "If you prefer to install directly from this repository:"
+            echo ""
+            echo "\`\`\`bash"
+            echo "# Download and install RPM manually"
+            echo "sudo dnf install <rpm-url-from-release>"
+            echo "\`\`\`"
+            echo ""
+            echo "---"
+            echo ""
+            echo "## Installation"
+            echo ""
+            echo "### Atomic Fedora (Aurora, Bluefin, Silverblue)"
+            echo ""
+            echo "\`\`\`bash"
+            echo "# Using central repository (recommended)"
+            echo "sudo curl -o /etc/yum.repos.d/${RELEASE_TYPE}.repo \\"
+            echo "  https://abirkel.github.io/rpm-repo/repo/${RELEASE_TYPE}.repo"
+            echo "rpm-ostree install pia-nm"
+            echo "sudo systemctl reboot"
+            echo "\`\`\`"
+            echo ""
+            echo "### Traditional Fedora"
+            echo ""
+            echo "\`\`\`bash"
+            echo "# Using central repository (recommended)"
+            echo "sudo curl -o /etc/yum.repos.d/${RELEASE_TYPE}.repo \\"
+            echo "  https://abirkel.github.io/rpm-repo/repo/${RELEASE_TYPE}.repo"
+            echo "sudo dnf install pia-nm"
+            echo "\`\`\`"
+            echo ""
+            echo "See [INSTALL.md](https://github.com/abirkel/pia-nm/blob/main/INSTALL.md) for detailed instructions."
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Create GitHub release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            *.rpm
-          token: ${{ secrets.GITHUB_TOKEN }}
-          body: |
-            ## Installation
+          files: artifacts/*.rpm
+          body: ${{ steps.release_notes.outputs.notes }}
+          fail_on_unmatched_files: false
 
-            ### Atomic Fedora (Aurora, Bluefin, Silverblue) - RPM Recommended
+  publish-to-repo:
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger rpm-repo signing and publishing
+        run: |
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          if [ -z "$RELEASE_TYPE" ]; then
+            RELEASE_TYPE="stable"
+          fi
 
-            ```bash
-            # Download the RPM
-            curl -L -O https://github.com/abirkel/pia-nm/releases/download/${{ github.ref_name }}/pia-nm-${{ steps.version.outputs.version }}-1.fc*.noarch.rpm
-
-            # Install with rpm-ostree
-            rpm-ostree install ./pia-nm-*.rpm
-            sudo systemctl reboot
-            ```
-
-            ### Traditional Fedora, Debian, Ubuntu - pip install
-
-            ```bash
-            # Fedora
-            sudo dnf install python3-gobject NetworkManager wireguard-tools python3-pip
-            pip install --user git+https://github.com/abirkel/pia-nm.git
-
-            # Debian/Ubuntu
-            sudo apt install python3-gi gir1.2-nm-1.0 network-manager wireguard-tools python3-pip
-            pip install --user git+https://github.com/abirkel/pia-nm.git
-            ```
-
-            See [INSTALL.md](https://github.com/abirkel/pia-nm/blob/main/INSTALL.md) for detailed instructions.
+          gh workflow run sign-and-publish.yml \
+            --repo abirkel/rpm-repo \
+            -f builder_repo=${{ github.repository }} \
+            -f run_id=${{ github.run_id }} \
+            -f artifact_name=rpm-packages \
+            -f distro=fedora \
+            -f release=${{ needs.build.outputs.fedora_version }} \
+            -f arch=noarch \
+            -f build_type=$RELEASE_TYPE
+        env:
+          GH_TOKEN: ${{ secrets.RPM_REPO_DISPATCH_TOKEN }}
