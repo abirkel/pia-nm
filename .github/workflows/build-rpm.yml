@@ -35,6 +35,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       fedora_version: ${{ steps.fedora-version.outputs.version }}
+      actual_fedora_version: ${{ steps.extract-version.outputs.actual_fedora_version }}
 
     steps:
       - uses: actions/checkout@v4
@@ -108,7 +109,8 @@ jobs:
           path: |
             *.rpm
 
-      - name: Verify built packages
+      - name: Verify built packages and extract actual Fedora version
+        id: extract-version
         run: |
           set -euo pipefail
           echo "::group::Verifying built packages"
@@ -127,6 +129,18 @@ jobs:
               exit 1
             fi
           done
+
+          # Extract actual Fedora version from RPM filename
+          # Example: pia-nm-0.1.0-1.fc43.noarch.rpm -> 43
+          PKG=$(ls *.noarch.rpm | head -1)
+          if [[ $PKG =~ \.fc([0-9]+)\. ]]; then
+            ACTUAL_FEDORA_VERSION="${BASH_REMATCH[1]}"
+            echo "actual_fedora_version=$ACTUAL_FEDORA_VERSION" >> $GITHUB_OUTPUT
+            echo "✓ Extracted Fedora version: $ACTUAL_FEDORA_VERSION"
+          else
+            echo "::error::Could not extract Fedora version from RPM filename: $PKG"
+            exit 1
+          fi
 
           echo "✓ All packages verified"
           echo "::endgroup::"
@@ -230,7 +244,7 @@ jobs:
             -f run_id=${{ github.run_id }} \
             -f artifact_name=rpm-packages \
             -f distro=fedora \
-            -f release=${{ needs.build.outputs.fedora_version }} \
+            -f release=${{ needs.build.outputs.actual_fedora_version }} \
             -f arch=noarch \
             -f build_type=$RELEASE_TYPE
         env:
