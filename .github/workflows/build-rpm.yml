@@ -10,7 +10,7 @@ name: Build and Publish RPM
       fedora_version:
         description: 'Fedora version to build for'
         required: false
-        default: '41'
+        default: 'latest'
         type: string
       release_type:
         description: 'Release type (stable or testing)'
@@ -46,7 +46,7 @@ jobs:
             echo "version=${{ github.event.inputs.fedora_version }}" \
               >> $GITHUB_OUTPUT
           else
-            echo "version=41" >> $GITHUB_OUTPUT
+            echo "version=latest" >> $GITHUB_OUTPUT
           fi
 
       - name: Extract version from tag
