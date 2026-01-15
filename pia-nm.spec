@@ -25,6 +25,7 @@ Requires:       python3-gobject >= 3.42.0
 Requires:       NetworkManager >= 1.16
 Requires:       wireguard-tools
 Requires:       systemd
+Requires:       curl
 
 %description
 PIA-NM is a Python-based automation tool that maintains fresh WireGuard

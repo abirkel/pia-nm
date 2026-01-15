@@ -25,7 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import base64
 import json
 import logging
-import socket
+import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -316,6 +316,9 @@ class PIAClient:
     ) -> Dict[str, Any]:
         """Register WireGuard public key with PIA server.
 
+        Uses curl with --connect-to to properly handle SNI for SSL certificate validation
+        when connecting to a specific IP address with a hostname.
+
         Args:
             token: Authentication token from authenticate()
             pubkey: WireGuard public key (base64-encoded)
@@ -339,53 +342,51 @@ class PIAClient:
         logger.info("Registering WireGuard key with server: %s (%s)", server_hostname, server_ip)
 
         try:
-            # GET request to server's /addKey endpoint with query parameters
-            # Use hostname in URL for proper SNI, but override DNS resolution to use server_ip
-            # This mimics curl's --connect-to behavior
-            url = f"https://{server_hostname}:1337/addKey"
-            params = {"pt": token, "pubkey": pubkey}
+            # Use curl to handle IP-with-hostname SSL/SNI properly
+            # Alternative: forcediphttpsadapter library provides a more Pythonic HTTPAdapter
+            # solution, but curl is simpler and matches PIA's official script approach.
+            # See: https://github.com/Roadmaster/forcediphttpsadapter
+            
+            # Build curl command - mimics PIA official script approach
+            # --connect-to tells curl to connect to server_ip but use server_hostname for SNI
+            cmd = [
+                'curl', '-s', '-G',
+                '--connect-to', f'{server_hostname}::{server_ip}:',
+                '--data-urlencode', f'pt={token}',
+                '--data-urlencode', f'pubkey={pubkey}',
+                f'https://{server_hostname}:1337/addKey'
+            ]
 
-            # Use PIA's CA certificate for verification if available
-            verify = str(PIA_CERT_PATH) if PIA_CERT_PATH.exists() else True
+            # Add CA certificate if available
+            if PIA_CERT_PATH.exists():
+                cmd.insert(3, '--cacert')
+                cmd.insert(4, str(PIA_CERT_PATH))
 
-            # Create a custom session with DNS override for this specific request
-            # We need to resolve server_hostname to server_ip
-            from requests.adapters import HTTPAdapter
-            from urllib3.util.connection import create_connection
-            import socket
+            # Execute curl with timeout
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=REQUEST_TIMEOUT,
+                check=False  # We'll check return code manually
+            )
 
-            # Store original getaddrinfo
-            original_getaddrinfo = socket.getaddrinfo
+            # Check for curl errors
+            if result.returncode != 0:
+                error_msg = result.stderr.strip() if result.stderr else "Unknown curl error"
+                logger.error("curl failed with return code %d: %s", result.returncode, error_msg)
+                raise NetworkError(f"Failed to reach server: {error_msg}")
 
-            def custom_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
-                # Override DNS resolution for our specific hostname
-                if host == server_hostname:
-                    # Return the server_ip instead of doing DNS lookup
-                    return original_getaddrinfo(server_ip, port, family, type, proto, flags)
-                return original_getaddrinfo(host, port, family, type, proto, flags)
-
-            # Temporarily replace getaddrinfo
-            socket.getaddrinfo = custom_getaddrinfo
-
+            # Parse JSON response
             try:
-                response = self.session.get(
-                    url,
-                    params=params,
-                    timeout=REQUEST_TIMEOUT,
-                    verify=verify,
-                )
-            finally:
-                # Restore original getaddrinfo
-                socket.getaddrinfo = original_getaddrinfo
-            response.raise_for_status()
-
-            try:
-                data = response.json()
+                data = json.loads(result.stdout)
                 if not isinstance(data, dict):
                     raise APIError("Response is not a JSON object")
-            except ValueError as e:
+            except json.JSONDecodeError as e:
+                logger.error("Invalid JSON response: %s", result.stdout[:200])
                 raise APIError(f"Invalid JSON in response: {e}") from e
 
+            # Validate response structure
             self._validate_response_structure(
                 data, ["status", "server_key", "server_ip", "server_port", "peer_ip"]
             )
@@ -397,22 +398,15 @@ class PIAClient:
             logger.info("Successfully registered key with server: %s", server_hostname)
             return data
 
-        except requests.exceptions.HTTPError as e:
-            status_code = e.response.status_code
-            logger.error("HTTP %d error registering key: %s", status_code, e)
+        except subprocess.TimeoutExpired as e:
+            logger.error("curl command timed out after %d seconds", REQUEST_TIMEOUT)
+            raise NetworkError(f"Request timed out after {REQUEST_TIMEOUT} seconds") from e
 
-            if status_code == 401:
-                raise AuthenticationError("Invalid token") from e
-            else:
-                raise APIError(f"Key registration failed ({status_code}): {e}") from e
-
-        except (Timeout, RequestsConnectionError) as e:
-            logger.error("Network error registering key: %s", e)
-            raise NetworkError(f"Failed to reach server: {e}") from e
-
-        except RequestException as e:
-            logger.error("Request error: %s", e)
-            raise NetworkError(f"Request failed: {e}") from e
+        except FileNotFoundError as e:
+            logger.error("curl command not found")
+            raise NetworkError(
+                "curl not found. Install curl: sudo dnf install curl"
+            ) from e
 
         except (AuthenticationError, NetworkError, APIError):
             raise
