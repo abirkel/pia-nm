@@ -89,6 +89,89 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
+%pre
+# Pre-install: Nothing needed currently
+
+%post
+# Post-install: Inform user about setup
+if [ "$1" -eq 1 ]; then
+    # First install
+    echo "pia-nm installed successfully!"
+    echo "Run 'pia-nm setup' to configure your PIA VPN connections."
+fi
+
+%preun
+# Pre-uninstall: Stop and disable timer before removing files
+if [ "$1" -eq 0 ]; then
+    # Complete uninstall (not upgrade)
+    # Stop and disable the systemd timer for all users
+    for user_home in /home/*; do
+        if [ -d "$user_home" ]; then
+            username=$(basename "$user_home")
+            # Try to stop/disable timer as each user
+            runuser -u "$username" -- systemctl --user disable --now pia-nm-refresh.timer 2>/dev/null || true
+            runuser -u "$username" -- systemctl --user stop pia-nm-refresh.service 2>/dev/null || true
+        fi
+    done
+    
+    # Also try for root user
+    systemctl --user disable --now pia-nm-refresh.timer 2>/dev/null || true
+    systemctl --user stop pia-nm-refresh.service 2>/dev/null || true
+fi
+
+%postun
+# Post-uninstall: Clean up user data and NetworkManager connections
+if [ "$1" -eq 0 ]; then
+    # Complete uninstall (not upgrade)
+    
+    # Remove NetworkManager PIA connections for all users
+    for conn_file in /etc/NetworkManager/system-connections/PIA-*.nmconnection; do
+        if [ -f "$conn_file" ]; then
+            rm -f "$conn_file" 2>/dev/null || true
+        fi
+    done
+    
+    # Reload NetworkManager to pick up connection deletions
+    systemctl reload NetworkManager 2>/dev/null || true
+    
+    # Clean up user configuration and data directories
+    for user_home in /home/*; do
+        if [ -d "$user_home" ]; then
+            username=$(basename "$user_home")
+            
+            # Remove config directory
+            if [ -d "$user_home/.config/pia-nm" ]; then
+                rm -rf "$user_home/.config/pia-nm" 2>/dev/null || true
+            fi
+            
+            # Remove data/logs directory
+            if [ -d "$user_home/.local/share/pia-nm" ]; then
+                rm -rf "$user_home/.local/share/pia-nm" 2>/dev/null || true
+            fi
+            
+            # Remove systemd user units (in case they exist from pip install)
+            rm -f "$user_home/.config/systemd/user/pia-nm-refresh.service" 2>/dev/null || true
+            rm -f "$user_home/.config/systemd/user/pia-nm-refresh.timer" 2>/dev/null || true
+            
+            # Reload systemd user daemon
+            runuser -u "$username" -- systemctl --user daemon-reload 2>/dev/null || true
+            
+            # Note: We don't automatically delete keyring credentials for security reasons
+            # Users should manually clear if desired using:
+            # python3 -c "import keyring; keyring.delete_password('pia-nm', 'username'); keyring.delete_password('pia-nm', 'password')"
+        fi
+    done
+    
+    # Also clean up for root user
+    rm -rf /root/.config/pia-nm 2>/dev/null || true
+    rm -rf /root/.local/share/pia-nm 2>/dev/null || true
+    
+    echo "pia-nm has been uninstalled."
+    echo "Note: Keyring credentials were NOT automatically deleted for security."
+    echo "To manually clear credentials, run:"
+    echo "  python3 -c \"import keyring; keyring.delete_password('pia-nm', 'username'); keyring.delete_password('pia-nm', 'password')\""
+fi
+
 %files -f %{pyproject_files}
 %license LICENSE
 %doc README.md INSTALL.md COMMANDS.md TROUBLESHOOTING.md
