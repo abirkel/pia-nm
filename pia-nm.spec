@@ -134,6 +134,13 @@ if [ "$1" -eq 0 ]; then
     # Reload NetworkManager to pick up connection deletions
     systemctl reload NetworkManager 2>/dev/null || true
     
+    # Remove dispatcher scripts
+    rm -f /etc/NetworkManager/dispatcher.d/99-pia-nm-ipv6-guard.sh 2>/dev/null || true
+    rm -f /etc/NetworkManager/dispatcher.d/98-pia-nm-connection-notify.sh 2>/dev/null || true
+    
+    # Clean up dispatcher runtime directory
+    rm -rf /run/pia-nm 2>/dev/null || true
+    
     # Clean up user configuration and data directories
     for user_home in /home/*; do
         if [ -d "$user_home" ]; then
