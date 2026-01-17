@@ -105,6 +105,8 @@ fi
 if [ "$1" -eq 0 ]; then
     # Complete uninstall (not upgrade)
     # Stop and disable the systemd timer for all users
+    # Note: The systemd unit files in /usr/lib/systemd/user/ are automatically
+    # removed by RPM after this script runs (they're tracked in %files section)
     for user_home in /home/*; do
         if [ -d "$user_home" ]; then
             username=$(basename "$user_home")
@@ -136,7 +138,6 @@ if [ "$1" -eq 0 ]; then
     
     # Remove dispatcher scripts
     rm -f /etc/NetworkManager/dispatcher.d/99-pia-nm-ipv6-guard.sh 2>/dev/null || true
-    rm -f /etc/NetworkManager/dispatcher.d/98-pia-nm-connection-notify.sh 2>/dev/null || true
     
     # Clean up dispatcher runtime directory
     rm -rf /run/pia-nm 2>/dev/null || true
