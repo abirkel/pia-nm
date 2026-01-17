@@ -295,7 +295,8 @@ def refresh_inactive_connection(
         # Update the connection with new settings
         # The Update2 method saves the connection to disk
         try:
-            connection.update2(updated_settings, NM.SettingSecretFlags.NONE, None)  # cancellable
+            future = nm_client.update_connection_async(connection, updated_settings)
+            future.result()  # Wait for the async operation to complete
             logger.info("Successfully updated saved profile: %s", conn_id)
             logger.info(
                 "Connection %s updated saved profile (will use on next activation)", conn_id

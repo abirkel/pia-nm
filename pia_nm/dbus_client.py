@@ -422,3 +422,38 @@ class NMClient:
         except Exception as exc:  # pylint: disable=broad-except
             logger.error("Failed to get applied connection: %s", exc)
             return None
+
+    def update_connection_async(
+        self, connection: NM.RemoteConnection, settings: Dict[str, Any]
+    ) -> Future:
+        """
+        Update a connection's settings asynchronously.
+
+        This updates the saved connection profile. For active connections,
+        the changes will take effect on next activation unless reapply is used.
+
+        Args:
+            connection: NM.RemoteConnection to update
+            settings: Dictionary of new settings
+
+        Returns:
+            Future that resolves when the update is complete
+        """
+        callback, future = self.create_callback(finish_method_name="update2_finish")
+
+        def update_async_impl():
+            self._assert_running_on_main_loop_thread()
+            # update2 signature: (settings, flags, args, cancellable, callback, user_data)
+            # flags: 0 for no special flags
+            # args: None or empty dict for no additional arguments
+            connection.update2(
+                settings,
+                0,  # flags (0 = no special flags)
+                None,  # args (dict for specific settings)
+                None,  # cancellable
+                callback,
+                None,  # user_data
+            )
+
+        self._run_on_main_loop(update_async_impl)
+        return future
