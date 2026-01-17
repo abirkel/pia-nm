@@ -43,7 +43,10 @@ class TestConnectionActiveCheck:
         mock_active_conn = Mock()
         mock_nm_client.get_active_connection = Mock(return_value=mock_active_conn)
 
-        result = is_connection_active(mock_nm_client, "PIA-US-East")
+        mock_connection = Mock()
+        mock_connection.get_id.return_value = "PIA-US-East"
+
+        result = is_connection_active(mock_nm_client, mock_connection)
 
         assert result is True
         mock_nm_client.get_active_connection.assert_called_once_with("PIA-US-East")
@@ -53,7 +56,10 @@ class TestConnectionActiveCheck:
         mock_nm_client = Mock()
         mock_nm_client.get_active_connection = Mock(return_value=None)
 
-        result = is_connection_active(mock_nm_client, "PIA-US-East")
+        mock_connection = Mock()
+        mock_connection.get_id.return_value = "PIA-US-East"
+
+        result = is_connection_active(mock_nm_client, mock_connection)
 
         assert result is False
 

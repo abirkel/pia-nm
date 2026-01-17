@@ -165,7 +165,6 @@ class TestConfigReadWrite:
         manager = ConfigManager(config_path=config_path)
 
         config = manager.load()
-
         assert config["regions"] == []
         assert config["preferences"]["dns"] is True
         assert config["preferences"]["ipv6"] is False
@@ -207,9 +206,8 @@ class TestConfigReadWrite:
 
         manager = ConfigManager(config_path=config_path)
         config = manager.load()
-
         assert config["regions"] == []
-        assert config["metadata"]["version"] == 1
+        assert config["metadata"]["version"] == 2
 
     def test_save_creates_file_with_correct_permissions(self, tmp_path):
         """Test that save creates file with 0600 permissions."""
@@ -336,47 +334,51 @@ class TestRegionManagement:
         config_path = tmp_path / "config.yaml"
         manager = ConfigManager(config_path=config_path)
 
-        manager.add_region("us-east")
+        manager.add_region("us-east", "uuid-123")
 
         config = manager.load()
-        assert "us-east" in config["regions"]
         assert len(config["regions"]) == 1
+        assert config["regions"][0]["region_id"] == "us-east"
+        assert config["regions"][0]["uuid"] == "uuid-123"
 
     def test_add_multiple_regions(self, tmp_path):
         """Test adding multiple regions."""
         config_path = tmp_path / "config.yaml"
         manager = ConfigManager(config_path=config_path)
 
-        manager.add_region("us-east")
-        manager.add_region("uk-london")
-        manager.add_region("jp-tokyo")
+        manager.add_region("us-east", "uuid-1")
+        manager.add_region("uk-london", "uuid-2")
+        manager.add_region("jp-tokyo", "uuid-3")
 
         config = manager.load()
-        assert config["regions"] == ["us-east", "uk-london", "jp-tokyo"]
+        assert len(config["regions"]) == 3
+        assert config["regions"][0] == {"region_id": "us-east", "uuid": "uuid-1"}
+        assert config["regions"][1] == {"region_id": "uk-london", "uuid": "uuid-2"}
+        assert config["regions"][2] == {"region_id": "jp-tokyo", "uuid": "uuid-3"}
 
     def test_add_duplicate_region_raises_error(self, tmp_path):
         """Test that adding duplicate region raises ConfigError."""
         config_path = tmp_path / "config.yaml"
         manager = ConfigManager(config_path=config_path)
 
-        manager.add_region("us-east")
+        manager.add_region("us-east", "uuid-123")
 
         with pytest.raises(ConfigError, match="already configured"):
-            manager.add_region("us-east")
+            manager.add_region("us-east", "uuid-456")
 
     def test_remove_region(self, tmp_path):
         """Test removing a region."""
         config_path = tmp_path / "config.yaml"
         manager = ConfigManager(config_path=config_path)
 
-        manager.add_region("us-east")
-        manager.add_region("uk-london")
+        manager.add_region("us-east", "uuid-1")
+        manager.add_region("uk-london", "uuid-2")
 
         manager.remove_region("us-east")
 
         config = manager.load()
-        assert "us-east" not in config["regions"]
-        assert "uk-london" in config["regions"]
+        assert len(config["regions"]) == 1
+        assert config["regions"][0]["region_id"] == "uk-london"
 
     def test_remove_nonexistent_region_raises_error(self, tmp_path):
         """Test that removing nonexistent region raises ConfigError."""
@@ -391,12 +393,66 @@ class TestRegionManagement:
         config_path = tmp_path / "config.yaml"
         manager = ConfigManager(config_path=config_path)
 
-        manager.add_region("us-east")
-        manager.add_region("uk-london")
+        manager.add_region("us-east", "uuid-1")
+        manager.add_region("uk-london", "uuid-2")
+
+        regions = manager.get_regions()
+        assert len(regions) == 2
+        assert regions[0] == {"region_id": "us-east", "uuid": "uuid-1"}
+        assert regions[1] == {"region_id": "uk-london", "uuid": "uuid-2"}
+
+    def test_get_region_ids(self, tmp_path):
+        """Test get_region_ids returns list of region IDs only."""
+        config_path = tmp_path / "config.yaml"
+        manager = ConfigManager(config_path=config_path)
+
+        manager.add_region("us-east", "uuid-1")
+        manager.add_region("uk-london", "uuid-2")
+
+        region_ids = manager.get_region_ids()
+        assert region_ids == ["us-east", "uk-london"]
+
+    def test_get_region_uuid(self, tmp_path):
+        """Test get_region_uuid returns UUID for a region."""
+        config_path = tmp_path / "config.yaml"
+        manager = ConfigManager(config_path=config_path)
+
+        manager.add_region("us-east", "uuid-123")
+
+        uuid = manager.get_region_uuid("us-east")
+        assert uuid == "uuid-123"
+
+        # Test non-existent region
+        uuid = manager.get_region_uuid("non-existent")
+        assert uuid is None
+
+    def test_get_region_by_uuid(self, tmp_path):
+        """Test get_region_by_uuid returns region dict."""
+        config_path = tmp_path / "config.yaml"
+        manager = ConfigManager(config_path=config_path)
+
+        manager.add_region("us-east", "uuid-123")
+
+        region = manager.get_region_by_uuid("uuid-123")
+        assert region == {"region_id": "us-east", "uuid": "uuid-123"}
+
+        # Test non-existent UUID
+        region = manager.get_region_by_uuid("non-existent")
+        assert region is None
+
+    def test_get_regions_returns_list_old(self, tmp_path):
+        """Test get_regions returns list of configured regions."""
+        config_path = tmp_path / "config.yaml"
+        manager = ConfigManager(config_path=config_path)
+
+        manager.add_region("us-east", "uuid-1")
+        manager.add_region("uk-london", "uuid-2")
 
         regions = manager.get_regions()
 
-        assert regions == ["us-east", "uk-london"]
+        assert len(regions) == 2
+        assert regions[0]["region_id"] == "us-east"
+        assert regions[1]["region_id"] == "uk-london"
 
     def test_get_regions_empty_list(self, tmp_path):
         """Test get_regions returns empty list when no regions configured."""
@@ -472,15 +528,17 @@ class TestConfigIntegration:
         manager = ConfigManager(config_path=config_path)
 
         # Add regions
-        manager.add_region("us-east")
-        manager.add_region("uk-london")
+        manager.add_region("us-east", "uuid-1")
+        manager.add_region("uk-london", "uuid-2")
 
         # Update timestamp
         manager.update_last_refresh()
 
         # Load and verify
         config = manager.load()
-        assert config["regions"] == ["us-east", "uk-london"]
+        assert len(config["regions"]) == 2
+        assert config["regions"][0]["region_id"] == "us-east"
+        assert config["regions"][1]["region_id"] == "uk-london"
         assert config["metadata"]["last_refresh"] is not None
 
         # Remove region
@@ -488,7 +546,8 @@ class TestConfigIntegration:
 
         # Verify removal
         regions = manager.get_regions()
-        assert regions == ["uk-london"]
+        assert len(regions) == 1
+        assert regions[0]["region_id"] == "uk-london"
 
     def test_config_survives_multiple_manager_instances(self, tmp_path):
         """Test that config persists across multiple manager instances."""
@@ -496,7 +555,7 @@ class TestConfigIntegration:
 
         # First manager
         manager1 = ConfigManager(config_path=config_path)
-        manager1.add_region("us-east")
+        manager1.add_region("us-east", "uuid-1")
         manager1.update_last_refresh()
 
         # Second manager
@@ -504,7 +563,8 @@ class TestConfigIntegration:
         regions = manager2.get_regions()
         timestamp = manager2.get_last_refresh()
 
-        assert regions == ["us-east"]
+        assert len(regions) == 1
+        assert regions[0]["region_id"] == "us-east"
         assert timestamp is not None
 
     def test_default_config_structure(self, tmp_path):

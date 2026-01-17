@@ -130,13 +130,13 @@ def test_property_active_connection_preservation(num_regions, num_active):
         # Setup NM client
         mock_nm_instance = MagicMock()
 
-        # Mock get_connection_by_id to return a connection for each region
-        def mock_get_connection(conn_id):
+        # Mock get_connection_by_uuid to return a connection for each region
+        def mock_get_connection(uuid):
             mock_conn = MagicMock()
-            mock_conn.get_id.return_value = conn_id
+            mock_conn.get_id.return_value = f"PIA-{uuid}"
             return mock_conn
 
-        mock_nm_instance.get_connection_by_id.side_effect = mock_get_connection
+        mock_nm_instance.get_connection_by_uuid.side_effect = mock_get_connection
         mock_nm_client.return_value = mock_nm_instance
 
         # Setup keypair loading
@@ -332,11 +332,13 @@ class TestCmdRefresh:
         # Mock config manager
         mock_config_mgr = MagicMock()
         mock_config_mgr.load.return_value = {
-            "regions": ["us-east"],
+            "regions": [{"region_id": "us-east", "uuid": "uuid-123"}],
             "preferences": {"dns": True, "ipv6": False, "port_forwarding": False},
-            "metadata": {"version": 1, "last_refresh": None},
+            "metadata": {"version": 2, "last_refresh": None},
         }
         mock_config_mgr.get_credentials.return_value = ("user", "pass")
+        mock_config_mgr.get_region_ids.return_value = ["us-east"]
+        mock_config_mgr.get_region_uuid.return_value = "uuid-123"
         mock_config_mgr_class.return_value = mock_config_mgr
 
         # Mock API client
@@ -362,7 +364,7 @@ class TestCmdRefresh:
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
         mock_connection.get_id.return_value = "PIA-US-East"
-        mock_nm_client.get_connection_by_id.return_value = mock_connection
+        mock_nm_client.get_connection_by_uuid.return_value = mock_connection
         mock_nm_client_class.return_value = mock_nm_client
 
         # Mock keypair loading
@@ -379,7 +381,7 @@ class TestCmdRefresh:
         cmd_refresh(region=None)
 
         # Verify D-Bus operations were used
-        mock_nm_client.get_connection_by_id.assert_called_once_with("PIA-US-East")
+        mock_nm_client.get_connection_by_uuid.assert_called_once_with("uuid-123")
         mock_is_active.assert_called_once()
         mock_refresh_active.assert_called_once()
 
@@ -476,19 +478,21 @@ class TestCmdRemoveRegion:
         # Mock config manager - region must be in config
         mock_config_mgr = MagicMock()
         mock_config_mgr.load.return_value = {
-            "regions": ["us-east"],
+            "regions": [{"region_id": "us-east", "uuid": "uuid-123"}],
             "preferences": {"dns": True, "ipv6": False, "port_forwarding": False},
-            "metadata": {"version": 1, "last_refresh": None},
+            "metadata": {"version": 2, "last_refresh": None},
         }
+        mock_config_mgr.get_region_uuid.return_value = "uuid-123"
         mock_config_mgr_class.return_value = mock_config_mgr
 
         # Mock NM client
         mock_nm_client = MagicMock()
         mock_connection = MagicMock()
-        mock_nm_client.get_connection_by_id.return_value = mock_connection
+        mock_connection.get_uuid.return_value = "uuid-123"
+        mock_nm_client.get_connection_by_uuid.return_value = mock_connection
 
         mock_future = Future()
-        mock_future.set_result(True)
+        mock_future.set_result(None)
         mock_nm_client.remove_connection_async.return_value = mock_future
         mock_nm_client_class.return_value = mock_nm_client
 
@@ -499,7 +503,7 @@ class TestCmdRemoveRegion:
         cmd_remove_region("us-east")
 
         # Verify D-Bus was used to remove connection
-        mock_nm_client.get_connection_by_id.assert_called_once_with("PIA-US-East")
+        mock_nm_client.get_connection_by_uuid.assert_called_once_with("uuid-123")
         mock_nm_client.remove_connection_async.assert_called_once_with(mock_connection)
 
 
@@ -539,5 +543,5 @@ class TestCmdStatus:
         cmd_status()
 
         # Verify D-Bus was used to query connection
-        mock_nm_client.get_connection_by_id.assert_called_once_with("PIA-US-East")
-        mock_nm_client.get_active_connection.assert_called_once_with("PIA-US-East")
+        mock_nm_client.get_connection_by_uuid.assert_called_once_with("uuid-123")
+        mock_nm_client.get_active_connection.assert_called_once()

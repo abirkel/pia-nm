@@ -21,7 +21,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 
 class CompactHelpFormatter(argparse.RawDescriptionHelpFormatter):
@@ -69,6 +69,7 @@ try:
         refresh_active_connection,
         refresh_inactive_connection,
     )
+
     DBUS_AVAILABLE = True
 except ImportError as e:
     DBUS_AVAILABLE = False
@@ -273,7 +274,7 @@ def cmd_setup() -> None:
 
     # 6. Create profiles for each region
     print("\nCreating profiles...")
-    successful_regions: List[str] = []
+    successful_regions: List[Dict[str, str]] = []
 
     for region_id in selected_ids:
         try:
@@ -361,8 +362,9 @@ def cmd_setup() -> None:
             # Wait for the operation to complete (with timeout)
             try:
                 remote_connection = future.result(timeout=10)
+                uuid = remote_connection.get_uuid()
                 print("  ✓ Success")
-                successful_regions.append(region_id)
+                successful_regions.append({"region_id": region_id, "uuid": uuid})
                 log_operation_success(f"setup region {region_id}")
             except TimeoutError:
                 print("✗ (timeout)")
@@ -422,6 +424,7 @@ def cmd_setup() -> None:
     try:
         log_operation_start("install dispatcher script")
         from pia_nm.dispatcher import install_dispatcher_script
+
         if install_dispatcher_script():
             print("✓ IPv6 leak prevention installed")
             log_operation_success("install dispatcher script")
@@ -438,8 +441,8 @@ def cmd_setup() -> None:
     print("✓ Setup Complete!")
     print("=" * 50)
     print(f"\nConfigured regions ({len(successful_regions)}):")
-    for region_name in successful_regions:
-        print(f"  • {region_name}")
+    for region in successful_regions:
+        print(f"  • {region['region_id']}")
     print("\nYou can now:")
     print("  • View status: pia-nm status")
     print("  • Connect via NetworkManager GUI")
@@ -499,7 +502,6 @@ def cmd_refresh(region: Optional[str] = None) -> None:
     try:
         log_operation_start("load configuration")
         config_mgr = ConfigManager()
-        config = config_mgr.load()
         log_operation_success("load configuration")
     except ConfigError as e:
         print(f"✗ Failed to load configuration: {e}")
@@ -511,7 +513,7 @@ def cmd_refresh(region: Optional[str] = None) -> None:
         log_operation_failure("load configuration", e)
         sys.exit(1)
 
-    regions_to_refresh = [region] if region else config.get("regions", [])
+    regions_to_refresh = [region] if region else config_mgr.get_region_ids()
 
     if not regions_to_refresh:
         print("✗ No regions configured")
@@ -588,6 +590,16 @@ def cmd_refresh(region: Optional[str] = None) -> None:
             print(f"  {region_id}...")
             log_operation_start(f"refresh region {region_id}")
 
+            # Get UUID for this region
+            region_uuid = config_mgr.get_region_uuid(region_id)
+            if not region_uuid:
+                print("✗ (UUID not found in config)")
+                log_operation_failure(
+                    f"refresh region {region_id}", Exception("UUID not found in config")
+                )
+                failed += 1
+                continue
+
             # Find region data
             region_data = None
             for region in regions:
@@ -644,12 +656,9 @@ def cmd_refresh(region: Optional[str] = None) -> None:
             log_api_operation("register_key", region_id)
             conn_details = api.register_key(token, public_key, server_hostname, server_ip)
 
-            # Get connection by name
-            region_name = region_data.get("name", region_id)
-            profile_name = format_profile_name(region_name)
-
-            log_nm_operation("get_connection_by_id", profile_name)
-            connection = nm_client.get_connection_by_id(profile_name)
+            # Get connection by UUID
+            log_nm_operation("get_connection_by_uuid", region_uuid)
+            connection = nm_client.get_connection_by_uuid(region_uuid)
 
             if not connection:
                 print("✗ (connection not found)")
@@ -661,7 +670,7 @@ def cmd_refresh(region: Optional[str] = None) -> None:
                 continue
 
             # Check if connection is active
-            is_active = is_connection_active(nm_client, profile_name)
+            is_active = is_connection_active(nm_client, connection)
 
             # Prepare new endpoint
             server_endpoint = f"{conn_details['server_ip']}:{conn_details['server_port']}"
@@ -669,7 +678,7 @@ def cmd_refresh(region: Optional[str] = None) -> None:
             # Use appropriate refresh method based on connection state
             if is_active:
                 # Use live refresh (Reapply) for active connections
-                log_nm_operation("refresh_active_connection", profile_name)
+                log_nm_operation("refresh_active_connection", connection.get_id())
                 success = refresh_active_connection(
                     nm_client, connection, private_key, server_endpoint
                 )
@@ -687,7 +696,7 @@ def cmd_refresh(region: Optional[str] = None) -> None:
                     failed += 1
             else:
                 # Update saved profile for inactive connections
-                log_nm_operation("refresh_inactive_connection", profile_name)
+                log_nm_operation("refresh_inactive_connection", connection.get_id())
                 success = refresh_inactive_connection(
                     nm_client, connection, private_key, server_endpoint
                 )
@@ -877,6 +886,7 @@ def cmd_add_region(region_id: str) -> None:
         # Wait for the operation to complete (with timeout)
         try:
             remote_connection = future.result(timeout=10)
+            uuid = remote_connection.get_uuid()
             print("  ✓ Success")
             log_operation_success(f"create profile for {region_id}")
         except TimeoutError:
@@ -898,11 +908,8 @@ def cmd_add_region(region_id: str) -> None:
     # Add to config
     try:
         log_operation_start("update configuration")
-        config = config_mgr.load()
-        if region_id not in config.get("regions", []):
-            config["regions"].append(region_id)
-            config_mgr.save(config)
-            log_operation_success("update configuration", f"added {region_id}")
+        config_mgr.add_region(region_id, uuid)
+        log_operation_success("update configuration", f"added {region_id}")
     except Exception as e:
         print(f"✗ Failed to update configuration: {e}")
         log_operation_failure("update configuration", e)
@@ -921,7 +928,6 @@ def cmd_remove_region(region_id: str) -> None:
     try:
         log_operation_start("load configuration")
         config_mgr = ConfigManager()
-        config = config_mgr.load()
         log_operation_success("load configuration")
     except Exception as e:
         print(f"✗ Failed to load configuration: {e}")
@@ -929,7 +935,9 @@ def cmd_remove_region(region_id: str) -> None:
         print_error("config_not_found")
         sys.exit(1)
 
-    if region_id not in config.get("regions", []):
+    # Get UUID for this region
+    region_uuid = config_mgr.get_region_uuid(region_id)
+    if not region_uuid:
         print(f"✗ Region '{region_id}' not configured")
         logger.warning("Region not configured: %s", region_id)
         return
@@ -947,34 +955,14 @@ def cmd_remove_region(region_id: str) -> None:
 
     # Delete profile using D-Bus
     try:
-        # Get region data to format profile name correctly
-        try:
-            api = PIAClient()
-            regions = api.get_regions()
-            region_data = None
-            for r in regions:
-                if r["id"] == region_id:
-                    region_data = r
-                    break
+        log_nm_operation("delete_connection via D-Bus", region_uuid)
 
-            if region_data:
-                region_name = region_data.get("name", region_id)
-                profile_name = format_profile_name(region_name)
-            else:
-                # Fallback to using region_id if we can't get region data
-                profile_name = format_profile_name(region_id)
-        except Exception:
-            # Fallback to using region_id if API call fails
-            profile_name = format_profile_name(region_id)
-
-        log_nm_operation("delete_connection via D-Bus", profile_name)
-
-        # Get the connection
-        connection = nm_client.get_connection_by_id(profile_name)
+        # Get the connection by UUID
+        connection = nm_client.get_connection_by_uuid(region_uuid)
 
         if not connection:
-            print(f"⚠ Warning: Connection '{profile_name}' not found in NetworkManager")
-            logger.warning("Connection not found: %s", profile_name)
+            print(f"⚠ Warning: Connection with UUID '{region_uuid}' not found in NetworkManager")
+            logger.warning("Connection not found: %s", region_uuid)
         else:
             # Remove the connection
             future = nm_client.remove_connection_async(connection)
@@ -1002,8 +990,7 @@ def cmd_remove_region(region_id: str) -> None:
     # Remove from config
     try:
         log_operation_start("update configuration")
-        config["regions"].remove(region_id)
-        config_mgr.save(config)
+        config_mgr.remove_region(region_id)
         log_operation_success("update configuration", f"removed {region_id}")
     except Exception as e:
         print(f"✗ Failed to update configuration: {e}")
@@ -1039,7 +1026,7 @@ def cmd_status() -> None:
         print_error("config_not_found")
         sys.exit(1)
 
-    regions = config.get("regions", [])
+    regions = config_mgr.get_regions()
     last_refresh = config.get("metadata", {}).get("last_refresh")
 
     # Initialize NMClient singleton
@@ -1053,34 +1040,24 @@ def cmd_status() -> None:
         print_error("dbus_unavailable")
         sys.exit(1)
 
-    # Get region data for proper profile names
-    try:
-        api = PIAClient()
-        region_list = api.get_regions()
-        region_map = {r["id"]: r.get("name", r["id"]) for r in region_list}
-    except Exception as e:
-        logger.warning("Failed to fetch region data: %s", e)
-        region_map = {}
-
     print("\n" + "=" * 50)
     print("PIA NetworkManager Status")
     print("=" * 50)
 
     print(f"\nConfigured regions ({len(regions)}):")
     if regions:
-        for region_id in regions:
-            # Get proper region name for profile lookup
-            region_name = region_map.get(region_id, region_id)
-            profile_name = format_profile_name(region_name)
+        for region in regions:
+            region_id = region["region_id"]
+            region_uuid = region["uuid"]
 
             # Check if connection exists using D-Bus
-            connection = nm_client.get_connection_by_id(profile_name)
+            connection = nm_client.get_connection_by_uuid(region_uuid)
             exists = connection is not None
 
             # Check if connection is active using D-Bus
             active = False
             if exists:
-                active = is_connection_active(nm_client, profile_name)
+                active = is_connection_active(nm_client, connection)
 
             status = "✓ Active" if active else ("✓ Exists" if exists else "✗ Missing")
             print(f"  • {region_id:<20} {status}")
@@ -1147,8 +1124,7 @@ def cmd_uninstall() -> None:
     try:
         log_operation_start("load configuration for uninstall")
         config_mgr = ConfigManager()
-        config = config_mgr.load()
-        regions = config.get("regions", [])
+        regions = config_mgr.get_regions()
         log_operation_success("load configuration for uninstall")
 
         # Initialize NMClient for D-Bus operations
@@ -1160,43 +1136,32 @@ def cmd_uninstall() -> None:
             # Continue with uninstall even if NM client fails
             nm_client = None
 
-        # Get region data for proper profile names
-        try:
-            api = PIAClient()
-            region_list = api.get_regions()
-            region_map = {r["id"]: r.get("name", r["id"]) for r in region_list}
-        except Exception as e:
-            logger = logging.getLogger(__name__)
-            logger.warning("Failed to fetch region data: %s", e)
-            region_map = {}
-
-        for region_id in regions:
-            # Get proper region name for profile lookup
-            region_name = region_map.get(region_id, region_id)
-            profile_name = format_profile_name(region_name)
+        for region in regions:
+            region_id = region["region_id"]
+            region_uuid = region["uuid"]
 
             try:
                 if nm_client:
-                    log_nm_operation("delete_connection via D-Bus", profile_name)
+                    log_nm_operation("delete_connection via D-Bus", region_uuid)
 
-                    # Get the connection
-                    connection = nm_client.get_connection_by_id(profile_name)
+                    # Get the connection by UUID
+                    connection = nm_client.get_connection_by_uuid(region_uuid)
 
                     if connection:
                         # Remove the connection
                         future = nm_client.remove_connection_async(connection)
                         future.result(timeout=10)
-                        print(f"  ✓ Removed {profile_name}")
-                        log_operation_success(f"delete profile {profile_name}")
+                        print(f"  ✓ Removed {region_id}")
+                        log_operation_success(f"delete profile {region_id}")
                     else:
-                        print(f"  ⚠ Profile {profile_name} not found")
+                        print(f"  ⚠ Profile {region_id} not found")
                         logger = logging.getLogger(__name__)
-                        logger.warning("Profile not found: %s", profile_name)
+                        logger.warning("Profile not found: %s", region_id)
                 else:
-                    print(f"  ⚠ Skipped {profile_name} (NM client unavailable)")
+                    print(f"  ⚠ Skipped {region_id} (NM client unavailable)")
             except Exception as e:
-                print(f"  ✗ Failed to remove {profile_name}: {e}")
-                log_operation_failure(f"delete profile {profile_name}", e)
+                print(f"  ✗ Failed to remove {region_id}: {e}")
+                log_operation_failure(f"delete profile {region_id}", e)
 
     except Exception as e:
         print(f"✗ Failed to load configuration: {e}")
@@ -1218,6 +1183,7 @@ def cmd_uninstall() -> None:
     try:
         log_operation_start("uninstall dispatcher script")
         from pia_nm.dispatcher import uninstall_dispatcher_script
+
         if uninstall_dispatcher_script():
             print("  ✓ Removed IPv6 leak prevention")
             log_operation_success("uninstall dispatcher script")

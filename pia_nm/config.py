@@ -95,7 +95,7 @@ class ConfigManager:
                 "port_forwarding": False,
             },
             "metadata": {
-                "version": 1,
+                "version": 2,
                 "last_refresh": None,
             },
         }
@@ -120,8 +120,16 @@ class ConfigManager:
             raise ConfigError("'regions' must be a list")
 
         for region in config["regions"]:
-            if not isinstance(region, str):
-                raise ConfigError(f"Region must be string, got {type(region)}")
+            if not isinstance(region, dict):
+                raise ConfigError(f"Region must be dict, got {type(region)}")
+            if "region_id" not in region:
+                raise ConfigError("Region missing 'region_id' key")
+            if "uuid" not in region:
+                raise ConfigError("Region missing 'uuid' key")
+            if not isinstance(region["region_id"], str):
+                raise ConfigError(f"region_id must be string, got {type(region['region_id'])}")
+            if not isinstance(region["uuid"], str):
+                raise ConfigError(f"uuid must be string, got {type(region['uuid'])}")
 
         # Validate preferences
         prefs = config["preferences"]
@@ -246,23 +254,25 @@ class ConfigManager:
         except KeyringError as e:
             raise ConfigError(f"Failed to store credentials in keyring: {e}") from e
 
-    def add_region(self, region_id: str) -> None:
+    def add_region(self, region_id: str, uuid: str) -> None:
         """Add region to configuration.
 
         Args:
             region_id: Region identifier to add
+            uuid: NetworkManager connection UUID
 
         Raises:
             ConfigError: If region already exists or save fails
         """
         config = self.load()
 
-        if region_id in config["regions"]:
+        # Check if region_id already exists
+        if any(r["region_id"] == region_id for r in config["regions"]):
             raise ConfigError(f"Region '{region_id}' already configured")
 
-        config["regions"].append(region_id)
+        config["regions"].append({"region_id": region_id, "uuid": uuid})
         self.save(config)
-        logger.info("Added region: %s", region_id)
+        logger.info("Added region: %s (UUID: %s)", region_id, uuid)
 
     def remove_region(self, region_id: str) -> None:
         """Remove region from configuration.
@@ -275,24 +285,70 @@ class ConfigManager:
         """
         config = self.load()
 
-        if region_id not in config["regions"]:
+        # Find and remove the region
+        region_to_remove = None
+        for region in config["regions"]:
+            if region["region_id"] == region_id:
+                region_to_remove = region
+                break
+
+        if region_to_remove is None:
             raise ConfigError(f"Region '{region_id}' not configured")
 
-        config["regions"].remove(region_id)
+        config["regions"].remove(region_to_remove)
         self.save(config)
         logger.info("Removed region: %s", region_id)
 
-    def get_regions(self) -> List[str]:
+    def get_regions(self) -> List[Dict[str, str]]:
         """Get list of configured regions.
 
         Returns:
-            List of region identifiers
+            List of region dictionaries with 'region_id' and 'uuid' keys
         """
         config = self.load()
         regions = config["regions"]
         if not isinstance(regions, list):
             return []
         return regions
+
+    def get_region_ids(self) -> List[str]:
+        """Get list of configured region IDs only.
+
+        Returns:
+            List of region identifiers (strings)
+        """
+        regions = self.get_regions()
+        return [r["region_id"] for r in regions]
+
+    def get_region_uuid(self, region_id: str) -> Optional[str]:
+        """Get UUID for a specific region.
+
+        Args:
+            region_id: Region identifier to look up
+
+        Returns:
+            UUID string if found, None otherwise
+        """
+        regions = self.get_regions()
+        for region in regions:
+            if region["region_id"] == region_id:
+                return region["uuid"]
+        return None
+
+    def get_region_by_uuid(self, uuid: str) -> Optional[Dict[str, str]]:
+        """Get region by UUID.
+
+        Args:
+            uuid: NetworkManager connection UUID
+
+        Returns:
+            Region dictionary if found, None otherwise
+        """
+        regions = self.get_regions()
+        for region in regions:
+            if region["uuid"] == uuid:
+                return region
+        return None
 
     def update_last_refresh(self) -> None:
         """Update last_refresh timestamp to current time.

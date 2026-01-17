@@ -40,7 +40,10 @@ class TestIsConnectionActive:
         mock_active_conn = MagicMock()
         mock_nm_client.get_active_connection.return_value = mock_active_conn
 
-        result = is_connection_active(mock_nm_client, "test-conn")
+        mock_connection = MagicMock()
+        mock_connection.get_id.return_value = "test-conn"
+
+        result = is_connection_active(mock_nm_client, mock_connection)
 
         assert result is True
         mock_nm_client.get_active_connection.assert_called_once_with("test-conn")
@@ -50,7 +53,10 @@ class TestIsConnectionActive:
         mock_nm_client = MagicMock()
         mock_nm_client.get_active_connection.return_value = None
 
-        result = is_connection_active(mock_nm_client, "test-conn")
+        mock_connection = MagicMock()
+        mock_connection.get_id.return_value = "test-conn"
+
+        result = is_connection_active(mock_nm_client, mock_connection)
 
         assert result is False
         mock_nm_client.get_active_connection.assert_called_once_with("test-conn")

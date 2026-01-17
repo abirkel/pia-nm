@@ -36,17 +36,18 @@ from pia_nm.dbus_client import NMClient
 logger = logging.getLogger(__name__)
 
 
-def is_connection_active(nm_client: NMClient, conn_id: str) -> bool:
+def is_connection_active(nm_client: NMClient, connection: NM.RemoteConnection) -> bool:
     """
     Check if a connection is currently active.
 
     Args:
         nm_client: NMClient instance
-        conn_id: Connection ID/name to check
+        connection: NM.RemoteConnection to check
 
     Returns:
         True if the connection is active, False otherwise
     """
+    conn_id = connection.get_id()
     active_conn = nm_client.get_active_connection(conn_id)
     return active_conn is not None
 
