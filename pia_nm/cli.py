@@ -436,6 +436,23 @@ def cmd_setup() -> None:
         log_operation_failure("install dispatcher script", e)
         logger.warning("Continuing without IPv6 leak prevention")
 
+    # 10. Install connection notification dispatcher
+    print("\nInstalling connection notifications...")
+    try:
+        log_operation_start("install notification dispatcher script")
+        from pia_nm.dispatcher import install_notify_script
+
+        if install_notify_script():
+            print("✓ Connection notifications installed")
+            log_operation_success("install notification dispatcher script")
+        else:
+            print("✗ Failed to install connection notifications (requires sudo)")
+            logger.warning("Notification dispatcher script installation failed")
+    except Exception as e:
+        print(f"⚠ Warning: Could not install connection notifications: {e}")
+        log_operation_failure("install notification dispatcher script", e)
+        logger.warning("Continuing without connection notifications")
+
     # Success message
     print("\n" + "=" * 50)
     print("✓ Setup Complete!")
@@ -1192,6 +1209,21 @@ def cmd_uninstall() -> None:
     except Exception as e:
         print(f"  ⚠ Warning: Could not remove IPv6 leak prevention: {e}")
         log_operation_failure("uninstall dispatcher script", e)
+
+    # Remove connection notification dispatcher
+    print("\nRemoving connection notifications...")
+    try:
+        log_operation_start("uninstall notification dispatcher script")
+        from pia_nm.dispatcher import uninstall_notify_script
+
+        if uninstall_notify_script():
+            print("  ✓ Removed connection notifications")
+            log_operation_success("uninstall notification dispatcher script")
+        else:
+            print("  ⚠ Could not remove connection notifications (may require sudo)")
+    except Exception as e:
+        print(f"  ⚠ Warning: Could not remove connection notifications: {e}")
+        log_operation_failure("uninstall notification dispatcher script", e)
 
     # Delete config directory
     print("\nRemoving configuration...")
