@@ -1,0 +1,42 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "schedule": [
+    "every 6 hours"
+  ],
+  "timezone": "UTC",
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 0,
+  "packageRules": [
+    {
+      "description": "Auto-merge Fedora version updates and trigger build",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["quay.io/fedora/fedora"],
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true,
+      "schedule": ["at any time"],
+      "postUpgradeTasks": {
+        "commands": [
+          "echo 'Fedora version updated to {{{newVersion}}}'"
+        ],
+        "fileFilters": [".github/workflows/**"],
+        "executionMode": "update"
+      }
+    }
+  ],
+  "regexManagers": [
+    {
+      "description": "Track Fedora version in GitHub Actions workflow",
+      "fileMatch": ["^\\.github/workflows/build-rpm\\.yml$"],
+      "matchStrings": [
+        "quay\\.io/fedora/fedora:(?<currentValue>\\d+)"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "quay.io/fedora/fedora",
+      "versioningTemplate": "loose"
+    }
+  ]
+}

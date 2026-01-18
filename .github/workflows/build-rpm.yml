@@ -74,10 +74,19 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           FEDORA_VERSION="${{ steps.fedora-version.outputs.version }}"
 
+          # Use pinned Fedora version (managed by Renovate)
+          # renovate: datasource=docker depName=quay.io/fedora/fedora
+          FEDORA_IMAGE="quay.io/fedora/fedora:43"
+          
+          # Override with workflow input if provided
+          if [ "$FEDORA_VERSION" != "latest" ]; then
+            FEDORA_IMAGE="quay.io/fedora/fedora:${FEDORA_VERSION}"
+          fi
+
           docker run --rm \
             -v $(pwd):/workspace \
             -w /workspace \
-            quay.io/fedora/fedora:${FEDORA_VERSION} \
+            ${FEDORA_IMAGE} \
             bash -c "
               dnf install -y rpm-build python3-devel \
                 python3-setuptools python3-wheel \

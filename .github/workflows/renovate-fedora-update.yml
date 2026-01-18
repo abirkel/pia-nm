@@ -1,0 +1,70 @@
+---
+name: Renovate Fedora Update Handler
+
+'on':
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  trigger-build-on-fedora-update:
+    # Only run if PR was merged and created by Renovate
+    if: |
+      github.event.pull_request.merged == true &&
+      (github.event.pull_request.user.login == 'renovate[bot]' ||
+       github.event.pull_request.user.login == 'renovate-bot')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if Fedora version was updated
+        id: check-fedora
+        uses: actions/checkout@v4
+
+      - name: Extract Fedora version from workflow
+        id: extract-version
+        run: |
+          # Extract the Fedora version from the build workflow
+          FEDORA_VERSION=$(grep -oP 'quay\.io/fedora/fedora:\K\d+' \
+            .github/workflows/build-rpm.yml | head -1)
+          
+          if [ -n "$FEDORA_VERSION" ]; then
+            echo "fedora_version=$FEDORA_VERSION" >> $GITHUB_OUTPUT
+            echo "✓ Detected Fedora version: $FEDORA_VERSION"
+          else
+            echo "::error::Could not extract Fedora version"
+            exit 1
+          fi
+
+      - name: Trigger RPM build for new Fedora version
+        if: contains(github.event.pull_request.title, 'fedora/fedora')
+        run: |
+          FEDORA_VERSION="${{ steps.extract-version.outputs.fedora_version }}"
+          
+          echo "🚀 Triggering RPM build for Fedora $FEDORA_VERSION"
+          
+          gh workflow run build-rpm.yml \
+            --ref ${{ github.ref_name }} \
+            -f fedora_version="$FEDORA_VERSION" \
+            -f release_type="stable"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create issue comment
+        if: contains(github.event.pull_request.title, 'fedora/fedora')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fedoraVersion = '${{ steps.extract-version.outputs.fedora_version }}';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: `🎉 Fedora ${fedoraVersion} update merged!\n\n` +
+                    `✅ Automatically triggered RPM build workflow.\n\n` +
+                    `Check the [Actions tab](${context.payload.repository.html_url}/actions) for build progress.`
+            });
