@@ -89,6 +89,28 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
+# Install PolicyKit rule to allow wheel group to modify NetworkManager connections
+mkdir -p %{buildroot}%{_sysconfdir}/polkit-1/rules.d
+cat > %{buildroot}%{_sysconfdir}/polkit-1/rules.d/90-pia-nm.rules << 'EOF'
+// Allow users in wheel group to modify NetworkManager connections without authentication
+// This is required for pia-nm token refresh to work in non-interactive sessions
+// (SSH, systemd timers) where PolicyKit cannot prompt for authentication
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.NetworkManager.settings.modify.system" &&
+        subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});
+
+// Also allow for user's own connections
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.NetworkManager.settings.modify.own" &&
+        subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});
+EOF
+
 %pre
 # Pre-install: Nothing needed currently
 
@@ -99,6 +121,9 @@ if [ "$1" -eq 1 ]; then
     echo "pia-nm installed successfully!"
     echo "Run 'pia-nm setup' to configure your PIA VPN connections."
 fi
+
+# Reload PolicyKit to pick up new rules
+systemctl reload polkit 2>/dev/null || true
 
 %preun
 # Pre-uninstall: Stop and disable timer before removing files
@@ -125,6 +150,9 @@ fi
 # Post-uninstall: Clean up user data and NetworkManager connections
 if [ "$1" -eq 0 ]; then
     # Complete uninstall (not upgrade)
+    
+    # Reload PolicyKit after removing rules
+    systemctl reload polkit 2>/dev/null || true
     
     # Remove NetworkManager PIA connections for all users
     for conn_file in /etc/NetworkManager/system-connections/PIA-*.nmconnection; do
@@ -186,6 +214,7 @@ fi
 %{_bindir}/pia-nm
 %{_userunitdir}/pia-nm-refresh.service
 %{_userunitdir}/pia-nm-refresh.timer
+%config(noreplace) %{_sysconfdir}/polkit-1/rules.d/90-pia-nm.rules
 
 %changelog
 * Sat Nov 29 2025 PIA-NM Contributors <pia-nm@example.com> - 0.1.0-1
