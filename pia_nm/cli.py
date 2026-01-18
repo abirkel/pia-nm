@@ -1071,7 +1071,7 @@ def cmd_status() -> None:
     try:
         log_operation_start("check systemd timer status")
         timer_status = check_timer_status()
-        print(f"\nSystemd timer: {timer_status.get('status', 'Unknown')}")
+        print(f"\nSystemd timer: {timer_status.get('active', 'Unknown')}")
         if timer_status.get("next_run"):
             print(f"Next refresh: {timer_status['next_run']}")
         log_operation_success("check systemd timer status")

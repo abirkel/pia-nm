@@ -178,7 +178,7 @@ def load_keypair(region_id: str) -> Tuple[str, str]:
 def should_rotate_key(region_id: str) -> bool:
     """Check if WireGuard key rotation is needed.
 
-    A key should be rotated if it's older than 30 days.
+    A key should be rotated if it's older than 3 days.
 
     Args:
         region_id: Region identifier (e.g., 'us-east')
@@ -199,10 +199,10 @@ def should_rotate_key(region_id: str) -> bool:
         current_time = time.time()
         age_seconds = current_time - mtime
 
-        # 30 days in seconds
-        thirty_days_seconds = 30 * 24 * 60 * 60
+        # 3 days in seconds
+        three_days_seconds = 3 * 24 * 60 * 60
 
-        should_rotate = age_seconds > thirty_days_seconds
+        should_rotate = age_seconds > three_days_seconds
 
         if should_rotate:
             age_days = age_seconds / (24 * 60 * 60)

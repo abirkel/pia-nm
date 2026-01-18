@@ -350,7 +350,7 @@ class TestShouldRotateKey:
         keys_dir = tmp_path / ".config/pia-nm/keys"
         private_key_path = keys_dir / "us-east.key"
 
-        thirty_days_plus_one = time.time() - (30 * 24 * 60 * 60 + 1)
+        thirty_days_plus_one = time.time() - (3 * 24 * 60 * 60 + 1)
         import os
 
         os.utime(private_key_path, (thirty_days_plus_one, thirty_days_plus_one))

@@ -68,6 +68,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=%{_bindir}/pia-nm refresh
+BusName=org.freedesktop.secrets
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=pia-nm-refresh
@@ -82,7 +83,7 @@ Documentation=https://github.com/abirkel/pia-nm
 
 [Timer]
 OnBootSec=5min
-OnUnitActiveSec=12h
+OnUnitInactiveSec=12h
 Persistent=true
 
 [Install]
