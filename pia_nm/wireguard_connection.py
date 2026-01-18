@@ -27,6 +27,8 @@ along with PIA NetworkManager Integration.  If not, see <https://www.gnu.org/lic
 """
 
 import logging
+import os
+import pwd
 import socket
 import uuid
 from dataclasses import dataclass
@@ -39,6 +41,23 @@ gi.require_version("NM", "1.0")  # noqa: required before importing NM module
 from gi.repository import NM, GObject  # noqa: GObject must be imported for NM to work
 
 logger = logging.getLogger(__name__)
+
+
+def get_current_username() -> str:
+    """
+    Get the current user's username.
+
+    Returns:
+        Username of the current user
+
+    Raises:
+        RuntimeError: If username cannot be determined
+    """
+    try:
+        return pwd.getpwuid(os.getuid()).pw_name
+    except Exception as exc:
+        logger.error("Failed to get current username: %s", exc)
+        raise RuntimeError(f"Failed to get current username: {exc}") from exc
 
 
 @dataclass
@@ -193,7 +212,8 @@ def _add_connection_settings(connection: NM.SimpleConnection, config: WireGuardC
     Add NM.SettingConnection to the connection.
 
     This sets the connection name, UUID, type, interface name, and
-    autoconnect behavior.
+    autoconnect behavior. Also sets permissions to allow the current
+    user to modify the connection.
 
     Args:
         connection: NM.SimpleConnection to add settings to
@@ -220,6 +240,17 @@ def _add_connection_settings(connection: NM.SimpleConnection, config: WireGuardC
 
     # Disable autoconnect (user must manually activate)
     conn_settings.set_property(NM.SETTING_CONNECTION_AUTOCONNECT, False)
+
+    # Set permissions to allow current user to modify the connection
+    # Format: "user:{username}:" allows the user to modify this connection
+    # This prevents "Insufficient privileges" errors during token refresh
+    try:
+        username = get_current_username()
+        conn_settings.add_permission("user", username, None)
+        logger.debug("Set connection permissions for user: %s", username)
+    except Exception as exc:
+        logger.warning("Failed to set connection permissions: %s", exc)
+        logger.warning("Connection will be system-wide and may require root to modify")
 
     # Add the settings to the connection
     connection.add_setting(conn_settings)

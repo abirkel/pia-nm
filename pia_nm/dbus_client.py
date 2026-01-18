@@ -193,6 +193,11 @@ class NMClient:
                 # Set the result on the Future
                 future.set_result(result)
 
+            except GLib.Error as exc:
+                # GLib.Error from D-Bus operations - extract meaningful error info
+                error_msg = f"{exc.message} ({exc.domain}: {exc.code})"
+                logger.error("D-Bus operation failed: %s", error_msg)
+                future.set_exception(RuntimeError(error_msg))
             except BaseException as exc:  # pylint: disable=broad-except
                 # Set any exception on the Future
                 future.set_exception(exc)

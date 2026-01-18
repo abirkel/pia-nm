@@ -152,11 +152,11 @@ def load_keypair(region_id: str) -> Tuple[str, str]:
         public_key_path = keys_dir / f"{region_id}.pub"
 
         if not private_key_path.exists():
-            logger.error(f"Private key not found for region {region_id}")
+            logger.info(f"No existing keypair found for region {region_id}, will generate new one")
             raise FileNotFoundError(f"Private key not found: {private_key_path}")
 
         if not public_key_path.exists():
-            logger.error(f"Public key not found for region {region_id}")
+            logger.info(f"No existing public key found for region {region_id}, will generate new one")
             raise FileNotFoundError(f"Public key not found: {public_key_path}")
 
         private_key = private_key_path.read_text().strip()
