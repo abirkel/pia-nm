@@ -278,29 +278,56 @@ def refresh_inactive_connection(
     logger.info("Updating saved profile for inactive connection: %s", conn_id)
 
     try:
-        # Get saved connection settings
+        # Create a SimpleConnection from the remote connection
+        # This allows us to modify settings without unpacking/repacking GLib.Variants
         try:
             settings_variant = connection.to_dbus(NM.ConnectionSerializationFlags.ALL)
-            # Unpack the GLib.Variant to get a Python dict
-            settings = settings_variant.unpack()
+            simple_conn = NM.SimpleConnection.new_from_dbus(settings_variant)
         except Exception as exc:  # pylint: disable=broad-except
-            logger.error("Failed to get saved settings for %s: %s", conn_id, exc)
+            logger.error("Failed to create SimpleConnection for %s: %s", conn_id, exc)
             return False
 
-        # Update WireGuard settings
-        try:
-            updated_settings = update_wireguard_settings(settings, private_key, server_endpoint)
-        except ValueError as exc:
-            logger.error("Failed to update WireGuard settings: %s", exc)
+        # Get WireGuard settings
+        wg_setting = simple_conn.get_setting_by_name("wireguard")
+        if not wg_setting:
+            logger.error("No WireGuard settings found for connection: %s", conn_id)
             return False
 
-        # Update the connection with new settings
-        # The Update2 method saves the connection to disk
-        # Convert the dict back to GLib.Variant for the D-Bus call
+        # Update private key
+        wg_setting.props.private_key = private_key
+        logger.debug("Updated private key in WireGuard settings")
+
+        # Update peer endpoint
+        if wg_setting.get_peers_len() > 0:
+            peer = wg_setting.get_peer(0)
+
+            # Create new peer with updated endpoint
+            new_peer = NM.WireGuardPeer.new()
+            new_peer.set_public_key(peer.get_public_key(), False)
+            new_peer.set_endpoint(server_endpoint, False)
+            new_peer.set_persistent_keepalive(peer.get_persistent_keepalive())
+
+            # Copy allowed IPs
+            for i in range(peer.get_allowed_ips_len()):
+                allowed_ip = peer.get_allowed_ip(i, None)
+                new_peer.append_allowed_ip(allowed_ip, False)
+
+            new_peer.seal()
+
+            # Replace peer
+            wg_setting.clear_peers()
+            wg_setting.append_peer(new_peer)
+            logger.debug("Updated endpoint in WireGuard peer: %s", server_endpoint)
+        else:
+            logger.warning("No peers found in WireGuard settings")
+
+        # Convert back to Variant
         try:
             from gi.repository import GLib
 
-            updated_settings_variant = GLib.Variant("a{sa{sv}}", updated_settings)
+            updated_settings_variant = simple_conn.to_dbus(NM.ConnectionSerializationFlags.ALL)
+
+            # Update the connection with new settings
             future = nm_client.update_connection_async(connection, updated_settings_variant)
             future.result()  # Wait for the async operation to complete
             logger.info("Successfully updated saved profile: %s", conn_id)

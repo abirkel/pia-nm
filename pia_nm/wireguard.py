@@ -171,7 +171,7 @@ def load_keypair(region_id: str) -> Tuple[str, str]:
         return private_key, public_key
 
     except (OSError, IOError) as e:
-        logger.error(f"Failed to load keypair for {region_id}: {e}")
+        logger.debug(f"Failed to load keypair for {region_id}: {e}")
         raise WireGuardError(f"Failed to load keypair: {e}") from e
 
 

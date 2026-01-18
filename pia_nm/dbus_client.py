@@ -426,9 +426,7 @@ class NMClient:
             logger.error("Failed to get applied connection: %s", exc)
             return None
 
-    def update_connection_async(
-        self, connection: NM.RemoteConnection, settings: Dict[str, Any]
-    ) -> Future:
+    def update_connection_async(self, connection: NM.RemoteConnection, settings: Any) -> Future:
         """
         Update a connection's settings asynchronously.
 
@@ -437,22 +435,25 @@ class NMClient:
 
         Args:
             connection: NM.RemoteConnection to update
-            settings: Dictionary of new settings
+            settings: GLib.Variant of new settings (from to_dbus())
 
         Returns:
             Future that resolves when the update is complete
         """
+        from gi.repository import GLib
+
         callback, future = self.create_callback(finish_method_name="update2_finish")
 
         def update_async_impl():
             self._assert_running_on_main_loop_thread()
             # update2 signature: (settings, flags, args, cancellable, callback, user_data)
-            # flags: 0 for no special flags
-            # args: None or empty dict for no additional arguments
+            # settings: GLib.Variant of type a{sa{sv}}
+            # flags: NM.SettingsUpdate2Flags (use NONE for standard update)
+            # args: GLib.Variant of type a{sv} (empty dict for no additional arguments)
             connection.update2(
-                settings,
-                0,  # flags (0 = no special flags)
-                None,  # args (dict for specific settings)
+                settings,  # GLib.Variant
+                NM.SettingsUpdate2Flags.NONE,  # flags
+                GLib.Variant("a{sv}", {}),  # args (empty dict as Variant)
                 None,  # cancellable
                 callback,
                 None,  # user_data
