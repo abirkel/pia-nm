@@ -27,6 +27,26 @@ Whether you can't use the official PIA client, prefer native Linux integration, 
 - **GObject Introspection**: gir1.2-nm-1.0 (NetworkManager GObject introspection data)
 - **wireguard-tools**: For WireGuard key generation
 - **Active PIA subscription**: Valid username and password
+- **User permissions**: User must be in the `wheel` group for automated token refresh (see below)
+
+### User Permissions
+
+For automated token refresh to work in non-interactive sessions (systemd timers, SSH), your user must be in the `wheel` group. The RPM package automatically installs a PolicyKit rule that allows wheel group members to modify NetworkManager connections without authentication prompts.
+
+Check if you're in the wheel group:
+
+```bash
+groups | grep wheel
+```
+
+If not, add yourself (requires root):
+
+```bash
+sudo usermod -aG wheel $USER
+# Log out and back in for changes to take effect
+```
+
+**Why is this needed?** NetworkManager requires PolicyKit authorization to modify system connections. In interactive sessions (GUI, terminal), PolicyKit can prompt for your password. In non-interactive sessions (systemd timers running in the background), there's no way to prompt, so the PolicyKit rule grants permission automatically for wheel group members.
 
 ### Install System Dependencies
 
