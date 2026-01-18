@@ -305,14 +305,14 @@ def refresh_inactive_connection(
         except Exception as exc:  # pylint: disable=broad-except
             error_msg = str(exc)
             logger.error("Failed to update connection %s: %s", conn_id, error_msg)
-            
+
             # Provide helpful hint for permission errors
             if "Insufficient privileges" in error_msg or "nm-settings-error-quark: 1" in error_msg:
                 logger.error(
                     "Permission denied: Connection may be system-owned. "
                     "Try recreating connections with 'pia-nm setup' to fix permissions."
                 )
-            
+
             return False
 
     except Exception as exc:  # pylint: disable=broad-except

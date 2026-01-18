@@ -392,8 +392,8 @@ def _add_ipv4_settings(connection: NM.SimpleConnection, config: WireGuardConfig)
     ipv4_config.set_property(NM.SETTING_IP_CONFIG_ROUTE_METRIC, 50)
     logger.debug("Set route metric to 50 (will be 20050 in dedicated table)")
 
-    # Note: NetworkManager automatically creates routes based on the WireGuard 
-    # peer's allowed-ips setting. The peer's allowed-ips="0.0.0.0/0" tells NM 
+    # Note: NetworkManager automatically creates routes based on the WireGuard
+    # peer's allowed-ips setting. The peer's allowed-ips="0.0.0.0/0" tells NM
     # to route all traffic through the VPN via policy-based routing rules.
 
     # Configure DNS if use_vpn_dns is enabled
@@ -446,9 +446,7 @@ def _add_ipv6_settings(connection: NM.SimpleConnection, config: WireGuardConfig)
     else:
         # IPv6 is disabled (default)
         logger.debug("IPv6 disabled")
-        ipv6_config.set_property(
-            NM.SETTING_IP_CONFIG_METHOD, NM.SETTING_IP6_CONFIG_METHOD_DISABLED
-        )
+        ipv6_config.set_property(NM.SETTING_IP_CONFIG_METHOD, NM.SETTING_IP6_CONFIG_METHOD_DISABLED)
 
     # Add the settings to the connection
     connection.add_setting(ipv6_config)
