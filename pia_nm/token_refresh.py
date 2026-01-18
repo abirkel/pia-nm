@@ -280,7 +280,9 @@ def refresh_inactive_connection(
     try:
         # Get saved connection settings
         try:
-            settings = connection.to_dbus(NM.ConnectionSerializationFlags.ALL)
+            settings_variant = connection.to_dbus(NM.ConnectionSerializationFlags.ALL)
+            # Unpack the GLib.Variant to get a Python dict
+            settings = settings_variant.unpack()
         except Exception as exc:  # pylint: disable=broad-except
             logger.error("Failed to get saved settings for %s: %s", conn_id, exc)
             return False
@@ -294,8 +296,12 @@ def refresh_inactive_connection(
 
         # Update the connection with new settings
         # The Update2 method saves the connection to disk
+        # Convert the dict back to GLib.Variant for the D-Bus call
         try:
-            future = nm_client.update_connection_async(connection, updated_settings)
+            from gi.repository import GLib
+
+            updated_settings_variant = GLib.Variant("a{sa{sv}}", updated_settings)
+            future = nm_client.update_connection_async(connection, updated_settings_variant)
             future.result()  # Wait for the async operation to complete
             logger.info("Successfully updated saved profile: %s", conn_id)
             logger.info(
@@ -309,9 +315,13 @@ def refresh_inactive_connection(
             # Provide helpful hint for permission errors
             if "Insufficient privileges" in error_msg or "nm-settings-error-quark: 1" in error_msg:
                 logger.error(
-                    "Permission denied: Connection may be system-owned. "
-                    "Try recreating connections with 'pia-nm setup' to fix permissions."
+                    "PolicyKit authentication required: NetworkManager requires PolicyKit "
+                    "authorization to modify system connections. This fails in non-interactive "
+                    "sessions (SSH, systemd timers). Solutions:"
                 )
+                logger.error("  1. Run 'sudo pia-nm refresh' to use root privileges")
+                logger.error("  2. Add PolicyKit rule to allow your user to modify connections")
+                logger.error("  3. See TROUBLESHOOTING.md for PolicyKit configuration")
 
             return False
 
