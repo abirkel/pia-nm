@@ -184,11 +184,9 @@ class NMClient:
                 # Call the finish method to get the result
                 result = getattr(source_object, finish_method_name)(res)
 
-                # Some finish methods return None on error
-                if result is None:
-                    raise RuntimeError(
-                        f"D-Bus operation failed: {finish_method_name} returned None"
-                    )
+                # Note: Some finish methods (like update2_finish, delete_finish) return None
+                # on success. Real D-Bus errors are caught as GLib.Error below, so we don't
+                # need to check for None here.
 
                 # Set the result on the Future
                 future.set_result(result)
